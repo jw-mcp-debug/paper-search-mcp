@@ -1375,9 +1375,14 @@ if acm_searcher is not None:
         """
         return acm_searcher.read_paper(paper_id, save_path)
 
-
 def main():
-    mcp.run(transport="stdio")
+    import os
+    if os.environ.get("PORT"):
+        mcp.settings.host = "0.0.0.0"
+        mcp.settings.port = int(os.environ["PORT"])
+        mcp.run(transport="streamable-http")
+    else:
+        mcp.run(transport="stdio")
 
 
 if __name__ == "__main__":
