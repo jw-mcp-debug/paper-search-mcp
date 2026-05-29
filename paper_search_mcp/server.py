@@ -1384,3 +1384,6 @@ def main():
         mcp.run(transport="streamable-http")
     else:
         mcp.run(transport="stdio")
+
+if __name__ == "__main__":
+    main()
