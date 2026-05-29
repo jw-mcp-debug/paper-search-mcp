@@ -1380,10 +1380,7 @@ def main():
     if os.environ.get("PORT"):
         mcp.settings.host = "0.0.0.0"
         mcp.settings.port = int(os.environ["PORT"])
+        mcp.settings.transport_security.enable_dns_rebinding_protection = False
         mcp.run(transport="streamable-http")
     else:
         mcp.run(transport="stdio")
-
-
-if __name__ == "__main__":
-    main()
