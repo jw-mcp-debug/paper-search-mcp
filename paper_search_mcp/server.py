@@ -36,6 +36,10 @@ from .paper import Paper
 
 # Initialize MCP server
 mcp = FastMCP("paper_search_server")
+#adding KOBV OPAC Search
+from paper_search_mcp.opac.tools import register_opac_tools
+register_opac_tools(mcp)
+
 logger = logging.getLogger(__name__)
 
 # Instances of searchers
