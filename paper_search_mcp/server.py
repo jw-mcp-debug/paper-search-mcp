@@ -731,26 +731,26 @@ async def download_crossref(paper_id: str, save_path: str = "./downloads") -> st
         return str(e)
 
 
-@mcp.tool()
-async def download_scihub(
-    identifier: str,
-    save_path: str = "./downloads",
-    base_url: str = "https://sci-hub.se",
-) -> str:
-    """Download paper PDF via Sci-Hub (optional fallback connector).
-
-    Args:
-        identifier: DOI, title, PMID, or paper URL.
-        save_path: Directory to save the PDF.
-        base_url: Sci-Hub mirror URL.
-    Returns:
-        Downloaded PDF path on success; error message on failure.
-    """
-    fetcher = SciHubFetcher(base_url=base_url, output_dir=save_path)
-    result = await asyncio.to_thread(fetcher.download_pdf, identifier)
-    if result:
-        return result
-    return "Sci-Hub download failed. Try DOI first, then title, or change mirror URL."
+# @mcp.tool()
+# async def download_scihub(
+#     identifier: str,
+#    save_path: str = "./downloads",
+#    base_url: str = "https://sci-hub.se",
+#) -> str:
+#    """Download paper PDF via Sci-Hub (optional fallback connector).
+#
+#    Args:
+#        identifier: DOI, title, PMID, or paper URL.
+#        save_path: Directory to save the PDF.
+#        base_url: Sci-Hub mirror URL.
+#    Returns:
+#        Downloaded PDF path on success; error message on failure.
+#    """
+#    fetcher = SciHubFetcher(base_url=base_url, output_dir=save_path)
+#    result = await asyncio.to_thread(fetcher.download_pdf, identifier)
+#    if result:
+#        return result
+#    return "Sci-Hub download failed. Try DOI first, then title, or change mirror URL."
 
 
 @mcp.tool()
