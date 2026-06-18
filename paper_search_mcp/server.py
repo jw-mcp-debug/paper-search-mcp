@@ -19,7 +19,7 @@ from .academic_platforms.openalex import OpenAlexSearcher
 from .academic_platforms.pmc import PMCSearcher
 from .academic_platforms.core import CORESearcher
 from .academic_platforms.europepmc import EuropePMCSearcher
-from .academic_platforms.sci_hub import SciHubFetcher
+# from .academic_platforms.sci_hub import SciHubFetcher
 from .academic_platforms.dblp import DBLPSearcher
 from .academic_platforms.openaire import OpenAiresearcher
 from .academic_platforms.citeseerx import CiteSeerXSearcher
@@ -760,7 +760,7 @@ async def download_with_fallback(
     doi: str = "",
     title: str = "",
     save_path: str = "./downloads",
-    use_scihub: bool = True,
+    use_scihub: bool = False,
     scihub_base_url: str = "https://sci-hub.se",
 ) -> str:
     """Try source-native download, OA repositories, Unpaywall, then optional Sci-Hub.
