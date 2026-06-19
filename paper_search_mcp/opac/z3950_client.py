@@ -74,7 +74,7 @@ def _pqf(use_attr: int, term: str, isil: Optional[str] = BHT_ISIL) -> str:
 # MARC-Parsing
 # ---------------------------------------------------------------------------
 
-def _parse_marc(raw_data) -> dict:
+def _parse_marc(raw_data, isil: Optional[str] = BHT_ISIL) -> dict:
     """
     Parst einen MARC21-Datensatz aus PyZ3950-Rohdaten.
     Gibt ein dict mit bibliografischen Kernfeldern zurück.
@@ -127,8 +127,34 @@ def _parse_marc(raw_data) -> dict:
         sprache  = gf("041", "a")
         umfang   = gf("300", "a")
         schlagw  = gfa("650", "a") + gfa("689", "a")
-        signatur = gf("082", "a") or gf("092", "a")
         ppn      = gf("001")
+
+        # --- Standortsignatur: lokales Bestandsfeld 924 (B3Kat/KOBV) ---
+        # WICHTIG: NICHT Feld 082 (= Dewey-Klassifikation, z.B. "025.524").
+        # 924 ist mehrfach vorhanden (je besitzender Bibliothek); wir nehmen
+        # das Feld der BHT (Unterfeld b == ISIL) und dessen Signatur (g).
+        signatur = ""
+        sig_fallback = ""
+        for f in record.get_fields("924"):
+            sig = (f.get("g") or "").strip()
+            if not sig:
+                continue
+            owner = (f.get("b") or "").strip()
+            if isil and owner.upper() == isil.upper():
+                signatur = sig          # exakter BHT-Bestand
+                break
+            if not sig_fallback:
+                sig_fallback = sig      # erstes verfuegbares 924$g als Rueckfall
+        if not signatur:
+            signatur = sig_fallback
+        # Fallback: Standard-MARC-Bestandsfeld 852 ($h Klassifikation + $i Exemplar)
+        if not signatur:
+            f852 = record.get("852")
+            if f852 is not None:
+                teile = [f852.get(c) for c in ("h", "i", "j")]
+                signatur = " ".join(t.strip() for t in teile if t)
+        # Dewey-Klassifikation separat fuehren (Information, NICHT als Signatur)
+        ddc = gf("082", "a")
 
         # Bereinigungen
         jahr = jahr.strip(".,©[] ")
@@ -144,6 +170,7 @@ def _parse_marc(raw_data) -> dict:
             "umfang":       umfang,
             "schlagwoerter": schlagw[:8],
             "signatur":     signatur,
+            "ddc":          ddc,
             "ppn":          ppn,
         }
 
@@ -185,7 +212,7 @@ def suche_bht_sync(use_attr: int, term: str,
 
         treffer = []
         for i in range(min(max_records, total)):
-            marc = _parse_marc(res[i].data)
+            marc = _parse_marc(res[i].data, isil)
             if marc:
                 treffer.append(marc)
 
