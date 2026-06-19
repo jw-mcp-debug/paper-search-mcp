@@ -1,84 +1,140 @@
-# BHT - KOBV + Paper Search MCP
+# BHT – KOBV + Paper Search MCP
 
-A Model Context Protocol (MCP) server for searching and downloading academic papers from multiple sources. The project is a fork of Paper Search MCP and includes a local library search of the BHT OPAC through a Z39.50 KOBV query. Paper-Search follows a free-first strategy: prioritize open and public data sources, support optional API keys when they improve stability or coverage, and keep source-specific connectors extensible for advanced users.
+A Model Context Protocol (MCP) server for academic literature research at the
+Berliner Hochschule für Technik (BHT). It combines **two capabilities in a single
+server**:
 
-![PyPI](https://img.shields.io/pypi/v/paper-search-mcp.svg) ![License](https://img.shields.io/badge/license-MIT-blue.svg) ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
-[![smithery badge](https://smithery.ai/badge/@openags/paper-search-mcp)](https://smithery.ai/server/@openags/paper-search-mcp)
+1. **Library catalog search** of the BHT holdings and the KOBV union catalog via a
+   Z39.50 query (ISIL filter `DE-B768`).
+2. **Multi-source academic paper search** across open and public databases
+   (arXiv, Crossref, OpenAlex, PubMed, DOAJ, and more).
+
+The project is a fork of [openags/paper-search-mcp](https://github.com/openags/paper-search-mcp)
+with the OPAC/KOBV tools folded in, so that one connector serves both the catalog
+and the paper databases. It is intended to be deployed once (as a remote MCP
+connector) and used through Claude with the staged `agentische-recherche` workflow.
+
+![Python](https://img.shields.io/badge/python-3.10+-blue.svg) ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
 ---
 
 ## Table of Contents
 
 - [Overview](#overview)
+- [Scope: find, don't acquire](#scope-find-dont-acquire)
 - [Project Principles](#project-principles)
 - [Features](#features)
-- [Source Strategy](#source-strategy)
-- [Sci-Hub Notice](#sci-hub-notice)
-- [Installation](#installation)
-  - [Claude Code (Skill)](#claude-code-skill--recommended-for-claude-code-users)
-  - [Method 1 — Smithery](#method-1--smithery-one-command-recommended-for-claude-desktop)
-  - [Method 2 — uvx](#method-2--uvx-no-install-always-latest)
-  - [Method 3 — uv](#method-3--uv-persistent-install)
-  - [Method 4 — pip](#method-4--pip-standard-python-install)
-  - [Method 5 — npx](#method-5--npx-via-smithery-cli-no-local-python-needed)
-  - [Method 6 — Docker](#method-6--docker)
-  - [Method 7 — Clone & run from source](#method-7--clone--run-from-source-development--recommended-for-macos-local)
-  - [Environment Variables](#environment-variables-env-file)
+- [Library Catalog (OPAC / KOBV)](#library-catalog-opac--kobv)
+- [Paper Source Strategy](#paper-source-strategy)
+- [Platform Capability Matrix](#platform-capability-matrix)
+- [Credential & API Key Requirements](#credential--api-key-requirements)
+- [Known Upstream Limitations](#known-upstream-limitations)
+- [Deployment (Render, remote connector)](#deployment-render-remote-connector)
+- [Local Development (stdio)](#local-development-stdio)
 - [Contributing](#contributing)
-- [Demo](#demo)
-- [Star History](#star-history)
-- [License](#license)
-- [TODO](#todo)
+- [License & Attribution](#license--attribution)
 
 ---
 
 ## Overview
 
-`paper-search-mcp` is a Python-based tool for searching and downloading academic papers from various platforms. It provides tools for searching papers, downloading PDFs, and extracting text, making it ideal for researchers and AI-driven workflows. It can be used as an MCP server (for Claude Desktop and other MCP clients) or as a Claude Code skill with a CLI interface.
+This server provides one MCP endpoint that an LLM client (Claude) can use to run a
+complete library-style literature search: first the **BHT/KOBV catalog** for
+foundational books, then the **paper databases** for current research. Both tool
+groups live on the same server process and are exposed over **streamable-HTTP**, so
+the whole thing is added to Claude as a single custom connector.
+
+The intended interaction pattern is the `agentische-recherche` skill: OPAC first
+(German foundational literature, BHT holdings), then targeted paper search (current
+research), then a synthesis with source links.
+
+## Scope: find, don't acquire
+
+This deployment is a **discovery** service. It locates literature and returns links
+to the source — it does **not** acquire full text on the user's behalf.
+
+- No Sci-Hub or other shadow-library paths are used. The optional Sci-Hub fallback
+  from the upstream project has been removed/disabled in this fork.
+- The download/read tools inherited from upstream are **not part of the BHT
+  workflow**; the `agentische-recherche` skill calls only the search tools.
+- Full text is reached through the library's legitimate channels: open-access links
+  (DOI), the BHT e-resources (EZB/DBIS, Shibboleth/VPN), or interlibrary loan
+  (Fernleihe via the KOBV portal).
 
 ## Project Principles
 
-- **Free-First**: Public and open sources are the default roadmap. Paid or restricted sources are not the core direction of this project.
-- **Optional API Keys**: API keys are supported only when they improve stability, rate limits, or metadata quality. The MCP should still be usable without them whenever possible.
-- **LLM-Friendly Retrieval**: Search results should be standardized, deduplicated, and as complete as possible for downstream LLM workflows.
-- **Source Transparency**: Different sources have different strengths. The MCP should make those tradeoffs explicit instead of pretending every source supports full-text retrieval.
+- **Free-First**: Public and open sources are the default. Paid or restricted
+  sources are not the core direction.
+- **Find, not acquire**: The server resolves *where* literature is, not *the file
+  itself*. Full-text access stays with the library's licensed routes.
+- **Optional API Keys**: Keys are supported only where they improve stability, rate
+  limits, or metadata quality. The server is usable without them.
+- **Source Transparency**: Different sources have different strengths; the server
+  makes those tradeoffs explicit instead of pretending every source supports
+  full-text retrieval.
 
 ---
 
 ## Features
 
-- **Two-Layer Architecture**:
-  - **Layer 1 (Unified Tooling)**: High-level `search_papers` for multi-source concurrent search & deduplication, and `download_with_fallback` relying on publisher open access links with sequential fallbacks.
-  - **Layer 2 (Platform Connectors)**: Modular connectors for specific academic platforms (arXiv, PubMed, bioRxiv, Semantic Scholar, etc.) equipped with intelligent DOI extraction via regex text analysis or API fields.
-- **Multi-Source Support**: Search and download papers from arXiv, PubMed, bioRxiv, medRxiv, Google Scholar, IACR ePrint Archive, Semantic Scholar, Crossref, OpenAlex, PubMed Central (PMC), CORE, Europe PMC, dblp, OpenAIRE, CiteSeerX, DOAJ, BASE, Zenodo, HAL, SSRN, Unpaywall (DOI lookup), and optional Sci-Hub workflows.
-- **Standardized Output**: Papers are returned in a consistent dictionary format via the `Paper` class.
-- **Free-First Design**: Open and public sources are prioritized before any optional commercial or restricted integrations.
-- **Optional API-Key Enhancement**: Sources like Semantic Scholar can work better with a user-provided API key, but are not intended to force paid usage.
-- **Discovery + Retrieval Workflow**: Google Scholar and Crossref can be used for discovery and DOI backfilling, while open repositories and publisher links are used for lawful full-text resolution where available.
-- **OA-First Fallback Chain**: `download_with_fallback` now follows source-native download → OpenAIRE/CORE/Europe PMC/PMC discovery → Unpaywall DOI resolution → optional Sci-Hub.
-- **MCP Integration**: Compatible with MCP clients for LLM context enhancement.
-- **Extensible Design**: Easily add new academic platforms by extending the `academic_platforms` module.
+- **Unified, two-domain tooling on one connector**:
+  - **Library catalog**: `opac_suche`, `opac_isbn_suche`, `opac_autor_suche`,
+    `kobv_verbund_suche` — Z39.50 search of BHT holdings and the KOBV union catalog.
+  - **Paper search**: high-level `search_papers` for multi-source, deduplicated
+    search, plus per-source `search_*` connectors.
+- **BHT holdings filter**: catalog searches are filtered to the BHT stock via
+  ISIL `DE-B768` (Bib-1 attribute 1044), with an option to widen to the full KOBV
+  union catalog for interlibrary loan.
+- **Multi-source paper coverage**: arXiv, PubMed, bioRxiv, medRxiv, IACR ePrint,
+  Semantic Scholar, Crossref, OpenAlex, PMC, CORE, Europe PMC, dblp, OpenAIRE,
+  CiteSeerX, DOAJ, BASE, Zenodo, HAL, SSRN, Unpaywall (DOI lookup).
+- **Standardized output**: papers are returned in a consistent dictionary format.
+- **Remote-ready transport**: runs over streamable-HTTP, deployable as a single
+  always-on endpoint and added to Claude as one custom connector.
+- **Extensible**: new paper platforms via the `academic_platforms` module; the OPAC
+  tools live in `paper_search_mcp/opac/`.
 
-## Source Strategy
+## Library Catalog (OPAC / KOBV)
 
-The long-term goal is not to depend on a single search engine, but to combine multiple free and public sources with clear roles:
+The catalog tools query the KOBV Z39.50 server and parse MARC21 records.
 
-- **Open metadata backbone**: Crossref, OpenAlex, Semantic Scholar, dblp, CiteSeerX, SSRN, Unpaywall (DOI-centric OA metadata).
+- **Z39.50 host**: `z3950.kobv.de:210`, database `k2`
+- **BHT holdings filter**: ISIL `DE-B768` via Bib-1 attribute `1044`
+- **Record format**: MARC21 → parsed to title, authors, publisher, year, edition,
+  ISBN, extent, language, call number (Signatur), subject headings, PPN
+
+| Tool | Purpose |
+|---|---|
+| `opac_suche` | General catalog search. Default filtered to BHT holdings (`nur_bht_bestand=true`). `suchtyp`: `subject` (controlled vocabulary, most precise), `any`, `title`, `author`. |
+| `opac_autor_suche` | All works by a given author held by the BHT. |
+| `opac_isbn_suche` | Availability check by ISBN; checks BHT first, then the union catalog with a Fernleihe note. |
+| `kobv_verbund_suche` | Full KOBV union catalog (all Berlin-Brandenburg libraries), no BHT filter — for interlibrary loan. |
+
+> Search tip: for topic searches, `suchtyp="subject"` is markedly more precise than
+> `"any"` because it uses the GND controlled vocabulary. Results are not relevance-
+> ranked, so scan a larger result set and select rather than taking the first few.
+
+## Paper Source Strategy
+
+The goal is not to depend on one engine, but to combine free and public sources with
+clear roles:
+
+- **Open metadata backbone**: Crossref, OpenAlex, Semantic Scholar, dblp, CiteSeerX,
+  SSRN, Unpaywall (DOI-centric OA metadata).
 - **Discipline-specific sources**: arXiv, PubMed, PubMed Central, Europe PMC, IACR.
-- **Open-access full-text sources**: arXiv, PMC, CORE, OpenAIRE, DOAJ, BASE, Zenodo, HAL, publisher open-access links.
-- **Discovery and DOI recovery**: Google Scholar can be useful for finding titles, versions, and DOI clues when other public metadata sources are incomplete.
+- **Open-access full-text sources**: arXiv, PMC, CORE, OpenAIRE, DOAJ, BASE, Zenodo,
+  HAL, publisher open-access links.
+- **Discovery / DOI recovery**: Google Scholar for finding titles, versions, and DOI
+  clues when other public metadata is incomplete.
 
-Recommended free-first roadmap:
-
-1. Keep current public sources stable.
-2. Add OpenAlex as a broad free metadata source.
-3. Add PubMed Central and Europe PMC for stronger biomedical full-text access.
-4. Add CORE and OpenAIRE for repository-based open-access retrieval.
-5. Use Google Scholar mainly as a discovery fallback, not as the primary canonical source.
+For topic searches a clean, targeted core (`crossref,openalex,doaj`) is recommended,
+extended by discipline (`arxiv` for CS/maths/physics; `pubmed`/`europepmc` for
+medicine/life sciences) rather than querying all sources at once.
 
 ## Platform Capability Matrix
 
-This matrix reflects **verified live-integration results** from functional and end-to-end regression tests in this repository. Columns show the highest capability level observed under normal conditions.
+Reflects verified live-integration results. Columns show the highest capability level
+observed under normal conditions.
 
 | Platform | Search | Download | Read | Notes |
 |---|---|---|---|---|
@@ -88,502 +144,163 @@ This matrix reflects **verified live-integration results** from functional and e
 | medRxiv | ✅ | ✅ | ✅ | Open API; reliable |
 | Google Scholar | ⚠️ | ❌ | ❌ | Bot-detection active; set `PAPER_SEARCH_MCP_GOOGLE_SCHOLAR_PROXY_URL` |
 | IACR | ✅ | ✅ | ✅ | Open API; reliable |
-| Semantic Scholar | ✅ | ✅ (OA) | ✅ (OA) | Works without key (rate-limited); key improves limits; key rejection (403) retried automatically without key |
+| Semantic Scholar | ✅ | ✅ (OA) | ✅ (OA) | Works without key (rate-limited); key improves limits |
 | Crossref | ✅ | ❌ | ⚠️ info-only | Open API; reliable |
-| OpenAlex | ✅ | ❌ | ⚠️ info-only | Open API; reliable |
-| PMC | ✅ | ✅ (OA only) | ✅ (OA only) | OA PDFs only; direct download may be blocked by some proxy environments |
-| CORE | ✅ | ✅ (record-dependent) | ✅ (record-dependent) | Free key recommended; connector retries with backoff and falls back to key-less on 401/403 |
-| Europe PMC | ✅ | ✅ (OA) | ✅ (OA) | OA PDFs only; direct download may be blocked by some proxy environments |
+| OpenAlex | ✅ | ❌ | ⚠️ info-only | Open API; reliable; provides citation counts |
+| PMC | ✅ | ✅ (OA only) | ✅ (OA only) | OA PDFs only |
+| CORE | ✅ | ✅ (record-dependent) | ✅ (record-dependent) | Free key recommended |
+| Europe PMC | ✅ | ✅ (OA) | ✅ (OA) | OA PDFs only |
 | dblp | ✅ | ❌ | ⚠️ info-only | Open API; reliable |
-| OpenAIRE | ✅ | ❌ | ❌ | Open API; retries 3× with escalating request profiles on transient 403 |
-| CiteSeerX | ⚠️ | ✅ (record-dependent) | ⚠️ | API endpoint intermittently unavailable / redirects to web archive |
-| DOAJ | ✅ | ⚠️ (URL-dependent) | ⚠️ (URL-dependent) | PDF availability varies by article; free key raises rate limits |
-| BASE | ⚠️ | ✅ (record-dependent) | ✅ (record-dependent) | OAI-PMH endpoint requires institutional IP registration; returns empty gracefully otherwise |
+| OpenAIRE | ✅ | ❌ | ❌ | Open API; transient 403 retried |
+| CiteSeerX | ⚠️ | ✅ (record-dependent) | ⚠️ | Endpoint intermittently unavailable |
+| DOAJ | ✅ | ⚠️ (URL-dependent) | ⚠️ (URL-dependent) | PDF availability varies; free key raises limits |
+| BASE | ⚠️ | ✅ (record-dependent) | ✅ (record-dependent) | OAI-PMH requires institutional IP registration |
 | Zenodo | ✅ | ✅ (record-dependent) | ✅ (record-dependent) | Open API; reliable |
 | HAL | ✅ | ✅ (record-dependent) | ✅ (record-dependent) | Open API; reliable |
-| SSRN | ⚠️ | ⚠️ best-effort | ⚠️ best-effort | 403 bot-detection active; public PDF only |
+| SSRN | ⚠️ | ⚠️ best-effort | ⚠️ best-effort | 403 bot-detection; public PDF only |
 | Unpaywall | ✅ (DOI lookup) | ❌ | ❌ | **Requires** `PAPER_SEARCH_MCP_UNPAYWALL_EMAIL` |
-| Sci-Hub (optional) | ⚠️ fallback-only | ✅ | ❌ | Optional; unstable mirrors; user responsibility |
 | **IEEE Xplore** 🔑 | 🚧 skeleton | 🚧 skeleton | 🚧 skeleton | Requires `PAPER_SEARCH_MCP_IEEE_API_KEY` to activate |
 | **ACM DL** 🔑 | 🚧 skeleton | 🚧 skeleton | 🚧 skeleton | Requires `PAPER_SEARCH_MCP_ACM_API_KEY` to activate |
 
-> ✅ = reliable in live tests.  ⚠️ = works but subject to upstream instability or access restrictions.  ❌ = not supported.  🔑 = key required.  🚧 = skeleton only.
+> ✅ = reliable in live tests. ⚠️ = works but subject to upstream instability. ❌ = not supported. 🔑 = key required. 🚧 = skeleton only.
+>
+> Note on the download/read columns: these reflect upstream capability. In the BHT
+> deployment the workflow is search/discovery only — download/read tools are not used
+> (see [Scope](#scope-find-dont-acquire)).
 
 ---
 
 ## Credential & API Key Requirements
 
-All keys are **optional** unless noted. Configure them in `.env` (preferred) or as shell exports.
+All keys are **optional** unless noted. Configure them as environment variables on
+the host (e.g. in the Render dashboard) or in a `.env` file for local runs. The OPAC
+needs **no** key — the KOBV Z39.50 endpoint is public.
 
 | Environment Variable | Provider | Required? | How to obtain |
 |---|---|---|---|
-| `PAPER_SEARCH_MCP_UNPAYWALL_EMAIL` | Unpaywall | **Yes** (Unpaywall disabled without it) | Any valid email; register at [unpaywall.org](https://unpaywall.org/products/api) |
-| `PAPER_SEARCH_MCP_CORE_API_KEY` | CORE | Recommended | Free at [core.ac.uk/services/api](https://core.ac.uk/services/api) |
-| `PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY` | Semantic Scholar | Optional | Free at [semanticscholar.org](https://www.semanticscholar.org/product/api) — improves rate limits |
-| `PAPER_SEARCH_MCP_GOOGLE_SCHOLAR_PROXY_URL` | Google Scholar | Optional | Your HTTP/HTTPS proxy URL — bypasses bot-detection |
-| `PAPER_SEARCH_MCP_DOAJ_API_KEY` | DOAJ | Optional | Free at [doaj.org](https://doaj.org/apply-for-api-key/) — raises hourly rate limit |
-| `PAPER_SEARCH_MCP_ZENODO_ACCESS_TOKEN` | Zenodo | Optional | Free at [zenodo.org](https://zenodo.org/account/settings/applications/) — required for private records |
-| `PAPER_SEARCH_MCP_IEEE_API_KEY` | IEEE Xplore | **Required to activate** | Free at [developer.ieee.org](https://developer.ieee.org/) |
-| `PAPER_SEARCH_MCP_ACM_API_KEY` | ACM DL | **Required to activate** | See [libraries.acm.org/digital-library/acm-open](https://libraries.acm.org/digital-library/acm-open) |
+| `PAPER_SEARCH_MCP_UNPAYWALL_EMAIL` | Unpaywall | Recommended (Unpaywall skipped without it) | Any valid email; register at [unpaywall.org](https://unpaywall.org/products/api) |
+| `PAPER_SEARCH_MCP_CORE_API_KEY` | CORE | Optional | Free at [core.ac.uk/services/api](https://core.ac.uk/services/api) |
+| `PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY` | Semantic Scholar | Optional | Free; improves rate limits |
+| `PAPER_SEARCH_MCP_GOOGLE_SCHOLAR_PROXY_URL` | Google Scholar | Optional | Your HTTP/HTTPS proxy URL |
+| `PAPER_SEARCH_MCP_DOAJ_API_KEY` | DOAJ | Optional | Free at [doaj.org](https://doaj.org/apply-for-api-key/) |
+| `PAPER_SEARCH_MCP_ZENODO_ACCESS_TOKEN` | Zenodo | Optional | Free at [zenodo.org](https://zenodo.org/account/settings/applications/) |
+| `PAPER_SEARCH_MCP_IEEE_API_KEY` | IEEE Xplore | Required to activate | Free at [developer.ieee.org](https://developer.ieee.org/) |
+| `PAPER_SEARCH_MCP_ACM_API_KEY` | ACM DL | Required to activate | See [libraries.acm.org](https://libraries.acm.org/digital-library/acm-open) |
 
-All variables follow the `PAPER_SEARCH_MCP_<NAME>` prefix scheme. Legacy names without the prefix (e.g. `CORE_API_KEY`, `UNPAYWALL_EMAIL`) are still supported for backward compatibility.
+All variables follow the `PAPER_SEARCH_MCP_<NAME>` prefix scheme. Legacy names without
+the prefix are still supported for backward compatibility.
 
 ---
 
 ## Known Upstream Limitations
 
-Some search failures are caused by external provider instability, not by bugs in this project:
+Some search failures come from external provider instability, not from bugs in this
+project:
 
 | Source | Symptom | Cause | Workaround |
 |---|---|---|---|
-| Google Scholar | Returns 0 results / empty HTML | Bot-detection (CAPTCHA) | Set `PAPER_SEARCH_MCP_GOOGLE_SCHOLAR_PROXY_URL` to a proxy |
-| Semantic Scholar | 429 rate-limited responses | Anonymous access rate limit | Set `PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY`; if key is rejected (403) connector automatically retries without key |
-| CORE | 500 / timeout errors | Unauthenticated rate limiting | Set `PAPER_SEARCH_MCP_CORE_API_KEY` (free); connector retries with exponential backoff and falls back to key-less on 401/403 |
-| OpenAIRE | Transient 403 responses | IP-based session rate limiting | Connector retries 3× per profile, escalating: plain session → XML Accept header → raw `requests.get` with Mozilla UA |
-| CiteSeerX | 404 via web archive redirect | PSU endpoint intermittently redirects to archive | No workaround; connector returns empty gracefully |
-| BASE | Search returns 0 results | OAI-PMH endpoint requires institutional IP registration | Register at [base-search.net](https://www.base-search.net/about/en/) for API access; connector returns empty gracefully otherwise |
-| SSRN | HTTP 403 | Bot-detection (Cloudflare) | No workaround; connector tries two endpoints and returns a clear message on failure |
-| PMC / Europe PMC | PDF download ProxyError | Local proxy blocking direct HTTPS PDF download | Disable proxy or use `download_with_fallback` instead |
-| Unpaywall | Skipped entirely | `UNPAYWALL_EMAIL` env var not set | Set `PAPER_SEARCH_MCP_UNPAYWALL_EMAIL` in `.env` |
-
-## Optional Paid Platform Connectors (Phase 3)
-
-IEEE Xplore and ACM Digital Library connectors are included as **opt-in skeletons**.
-They are **disabled by default** — no API calls are made unless you explicitly configure the corresponding keys.
-
-| Platform | Env Var | Status |
-|---|---|---|
-| IEEE Xplore | `PAPER_SEARCH_MCP_IEEE_API_KEY` | 🚧 skeleton — search registered, download/read raise `NotImplementedError` |
-| ACM Digital Library | `PAPER_SEARCH_MCP_ACM_API_KEY` | 🚧 skeleton — search registered, download/read raise `NotImplementedError` |
-
-**How to enable:**
-
-```bash
-export PAPER_SEARCH_MCP_IEEE_API_KEY=<your_ieee_key>       # free key at https://developer.ieee.org/
-export PAPER_SEARCH_MCP_ACM_API_KEY=<your_acm_key>         # see https://libraries.acm.org/digital-library
-```
-
-Once a key is set, the corresponding source is automatically added to `ALL_SOURCES` and its MCP tools (`search_ieee` / `search_acm`, `download_ieee` / `download_acm`, `read_ieee_paper` / `read_acm_paper`) are registered at server startup.
-
-Without a key the connectors log a startup warning only — the rest of the server is unaffected.
-
-## Free Source Expansion (Phase 4)
-
-Three additional free-source connectors are now integrated into the MCP server:
-
-- `zenodo`: Official Zenodo REST API connector (search + record-dependent PDF/read support).
-- `hal`: HAL public API connector (search + record-dependent PDF/read support).
-- `ssrn`: Discovery-first connector with hardened parser and best-effort download/read when a direct public PDF link is available.
-- `unpaywall`: DOI-centric OA metadata source for standalone lookup (`search_unpaywall`) and fallback URL resolution.
-
-SSRN integration remains compliance-first: it only attempts direct public PDF links exposed by SSRN pages. If login/restricted delivery is required, the connector returns a clear message instead of bypassing access controls.
-
-## Sci-Hub Notice
-
-Sci-Hub support can remain available as an optional connector for users who explicitly choose to enable it, but it should not be treated as the default or recommended full-text path.
-
-- Availability is unstable and mirrors change frequently.
-- Legal and policy risks vary by jurisdiction.
-- README and tool descriptions should clearly state that users are responsible for enabling and using it.
-- Open-access and publisher-permitted sources should be tried first whenever possible.
+| Google Scholar | 0 results / empty HTML | Bot-detection (CAPTCHA) | Set `PAPER_SEARCH_MCP_GOOGLE_SCHOLAR_PROXY_URL` |
+| Semantic Scholar | 429 responses | Anonymous rate limit | Set `PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY` |
+| CORE | 500 / timeout | Unauthenticated rate limiting | Set `PAPER_SEARCH_MCP_CORE_API_KEY` |
+| OpenAIRE | Transient 403 | IP-based session limiting | Connector retries with escalating profiles |
+| CiteSeerX | 404 / archive redirect | Endpoint intermittently redirects | Returns empty gracefully |
+| BASE | 0 results | OAI-PMH needs institutional IP | Register at [base-search.net](https://www.base-search.net/about/en/) |
+| SSRN | HTTP 403 | Bot-detection (Cloudflare) | Public PDF only; clear failure message |
+| PMC / Europe PMC | PDF ProxyError | Local proxy blocking HTTPS PDF | Not relevant to BHT search-only use |
+| Unpaywall | Skipped | email var not set | Set `PAPER_SEARCH_MCP_UNPAYWALL_EMAIL` |
 
 ---
 
-## Installation
+## Deployment (Render, remote connector)
 
-Choose the method that best fits your workflow. All methods support the same [optional API keys](#credential--api-key-requirements).
+This server is deployed as a single always-on web service and added to Claude as one
+custom connector.
 
----
+**1. Fork** this repository to your account (browser-only edits are sufficient for
+configuration).
 
-### Claude Code (Skill) — recommended for Claude Code users
+**2. Files the deployment relies on:**
 
-Install as a Claude Code skill instead of an MCP server. This gives Claude automatic access to paper search when you mention finding papers, academic literature, etc. — no MCP configuration needed.
+- `paper_search_mcp/opac/` — the OPAC module (`z3950_client.py`, `tools.py`,
+  `__init__.py`). `register_opac_tools(mcp)` is called from `server.py` after the
+  `FastMCP` instance is created.
+- `requirements.txt` — paper-search dependencies plus `pymarc` and `ply` (for the OPAC).
+- `setup.sh` — build script: installs `requirements.txt`, installs PyZ3950 from its
+  GitHub fork (not on PyPI), and applies the `ccl.py` stub patch required for Python
+  3.11+ compatibility (the catalog uses PQF queries, so the CCL parser is stubbed).
 
-**Prerequisites**: [uv](https://docs.astral.sh/uv/getting-started/installation/) and [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview).
+**3. Render web service settings:**
 
-**Step 1 — Clone the repo:**
+| Setting | Value |
+|---|---|
+| Build Command | `bash setup.sh` |
+| Start Command | `python -m paper_search_mcp.server` |
+| Health Check Path | *(leave empty)* — `/mcp` returns 406 to plain GETs by design |
+| Instance Type | Free (pilot) / paid for always-on |
+| Region | Frankfurt (EU) |
+| Env | `PAPER_SEARCH_MCP_UNPAYWALL_EMAIL` = institutional email (optional keys as needed) |
 
-```bash
-git clone https://github.com/openags/paper-search-mcp.git ~/paper-search-mcp
-```
+The entry point runs over streamable-HTTP when `PORT` is set (Render sets it
+automatically), binds to `0.0.0.0`, and disables DNS-rebinding protection so the
+service is reachable behind Render's proxy.
 
-**Step 2 — Install the skill:**
+**4. Add to Claude** as a custom connector with the URL
+`https://<your-service>.onrender.com/mcp` (no trailing slash, no port). After any
+redeploy that changes the tool set, remove and re-add the connector so the client
+re-fetches the tool list.
 
-```bash
-mkdir -p ~/.claude/skills/paper-search
-cp ~/paper-search-mcp/claude-code/SKILL.md ~/.claude/skills/paper-search/SKILL.md
-```
+> Note: the free tier sleeps after ~15 minutes of inactivity; the first request then
+> takes ~1 minute to wake. For a production service, host on always-on infrastructure
+> (e.g. a university/RZ VM) with a fixed HTTPS endpoint.
 
-**Step 3 — Update the repo path in the skill:**
+## Local Development (stdio)
 
-Edit `~/.claude/skills/paper-search/SKILL.md` and replace every `<REPO_PATH>` with the absolute path to your clone (e.g. `/Users/yourname/paper-search-mcp`).
-
-**Step 4 (optional) — Configure API keys:**
-
-Create a `.env` file in the repo root for optional API keys (see [Environment Variables](#environment-variables-env-file)).
-
-**That's it.** Next time you start Claude Code, just ask it to find papers — the skill activates automatically. For example:
-
-- "Find me recent papers on CRISPR base editing"
-- "Search arxiv and semantic scholar for transformer attention mechanisms"
-- "Download the PDF for arxiv paper 2106.12345"
-
-The skill uses a CLI (`paper-search`) that wraps the same library as the MCP server, outputting JSON for search/download and plain text for read.
-
----
-
-> **MCP Server Config file locations** (for methods below)
-> - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-> - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-> - **Linux**: `~/.config/Claude/claude_desktop_config.json`
-
----
-
-### Method 1 — Smithery (one-command, recommended for Claude Desktop)
+For development you can run the server locally over stdio (e.g. with Claude Desktop).
 
 ```bash
-npx -y @smithery/cli install @openags/paper-search-mcp --client claude
+git clone https://github.com/<your-account>/paper-search-mcp.git
+cd paper-search-mcp
+bash setup.sh                      # installs deps + PyZ3950 + ccl patch
+python -m paper_search_mcp.server  # stdio when PORT is not set
 ```
 
-Smithery automatically writes the correct config block for you. No manual JSON editing needed.
-
----
-
-### Method 2 — `uvx` (no install, always latest)
-
-`uvx` runs the package directly from PyPI without a permanent install. Requires [uv](https://docs.astral.sh/uv/getting-started/installation/).
-
-```bash
-# Install uv (skip if already installed)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-> ⚠️ **macOS note**: `uvx` generated wrapper scripts rely on `realpath`, which is not included in macOS by default. If you see a `realpath: command not found` error, either install GNU coreutils (`brew install coreutils`) or use **Method 3 (`uv run`)** instead — it does not have this limitation.
-
-**Claude Desktop config:**
+Claude Desktop config (stdio):
 
 ```json
 {
   "mcpServers": {
-    "paper-search-mcp": {
-      "command": "uvx",
-      "args": ["paper-search-mcp"],
-      "env": {
-        "PAPER_SEARCH_MCP_UNPAYWALL_EMAIL": "your@email.com",
-        "PAPER_SEARCH_MCP_CORE_API_KEY": "",
-        "PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY": "",
-        "PAPER_SEARCH_MCP_ZENODO_ACCESS_TOKEN": "",
-        "PAPER_SEARCH_MCP_GOOGLE_SCHOLAR_PROXY_URL": "",
-        "PAPER_SEARCH_MCP_IEEE_API_KEY": "",
-        "PAPER_SEARCH_MCP_ACM_API_KEY": ""
-      }
-    }
-  }
-}
-```
-
----
-
-### Method 3 — `uv` (persistent install)
-
-```bash
-uv tool install paper-search-mcp
-```
-
-**Claude Desktop config:**
-
-```json
-{
-  "mcpServers": {
-    "paper-search-mcp": {
-      "command": "uv",
-      "args": ["tool", "run", "paper-search-mcp"],
-      "env": {
-        "PAPER_SEARCH_MCP_UNPAYWALL_EMAIL": "your@email.com",
-        "PAPER_SEARCH_MCP_CORE_API_KEY": "",
-        "PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY": "",
-        "PAPER_SEARCH_MCP_ZENODO_ACCESS_TOKEN": "",
-        "PAPER_SEARCH_MCP_GOOGLE_SCHOLAR_PROXY_URL": "",
-        "PAPER_SEARCH_MCP_IEEE_API_KEY": "",
-        "PAPER_SEARCH_MCP_ACM_API_KEY": ""
-      }
-    }
-  }
-}
-```
-
----
-
-### Method 4 — `pip` (standard Python install)
-
-```bash
-pip install paper-search-mcp
-```
-
-**Claude Desktop config:**
-
-```json
-{
-  "mcpServers": {
-    "paper-search-mcp": {
+    "paper-opac-search": {
       "command": "python",
       "args": ["-m", "paper_search_mcp.server"],
       "env": {
-        "PAPER_SEARCH_MCP_UNPAYWALL_EMAIL": "your@email.com",
-        "PAPER_SEARCH_MCP_CORE_API_KEY": "",
-        "PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY": "",
-        "PAPER_SEARCH_MCP_ZENODO_ACCESS_TOKEN": "",
-        "PAPER_SEARCH_MCP_GOOGLE_SCHOLAR_PROXY_URL": "",
-        "PAPER_SEARCH_MCP_IEEE_API_KEY": "",
-        "PAPER_SEARCH_MCP_ACM_API_KEY": ""
+        "PAPER_SEARCH_MCP_UNPAYWALL_EMAIL": "your@email.com"
       }
     }
   }
 }
 ```
 
-> If `python` is not on your PATH, replace it with the full path (e.g. `/usr/bin/python3` or `C:\Python311\python.exe`). Run `which python3` / `where python` to find it.
-
----
-
-### Method 5 — `npx` (via Smithery CLI, no local Python needed)
-
-```bash
-npx -y @smithery/cli run @openags/paper-search-mcp
-```
-
-**Claude Desktop config:**
-
-```json
-{
-  "mcpServers": {
-    "paper-search-mcp": {
-      "command": "npx",
-      "args": ["-y", "@smithery/cli", "run", "@openags/paper-search-mcp"],
-      "env": {
-        "PAPER_SEARCH_MCP_UNPAYWALL_EMAIL": "your@email.com",
-        "PAPER_SEARCH_MCP_CORE_API_KEY": "",
-        "PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY": ""
-      }
-    }
-  }
-}
-```
-
----
-
-### Method 6 — Docker
-
-```bash
-docker build -t paper-search-mcp .
-docker run --rm -i \
-  -e PAPER_SEARCH_MCP_UNPAYWALL_EMAIL=your@email.com \
-  -e PAPER_SEARCH_MCP_CORE_API_KEY=your_core_key \
-  paper-search-mcp
-```
-
-**Claude Desktop config:**
-
-```json
-{
-  "mcpServers": {
-    "paper-search-mcp": {
-      "command": "docker",
-      "args": ["run", "--rm", "-i", "paper-search-mcp"],
-      "env": {
-        "PAPER_SEARCH_MCP_UNPAYWALL_EMAIL": "your@email.com",
-        "PAPER_SEARCH_MCP_CORE_API_KEY": "",
-        "PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY": "",
-        "PAPER_SEARCH_MCP_ZENODO_ACCESS_TOKEN": "",
-        "PAPER_SEARCH_MCP_GOOGLE_SCHOLAR_PROXY_URL": "",
-        "PAPER_SEARCH_MCP_IEEE_API_KEY": "",
-        "PAPER_SEARCH_MCP_ACM_API_KEY": ""
-      }
-    }
-  }
-}
-```
-
----
-
-### Method 7 — Clone & run from source (development / recommended for macOS local)
-
-This is the most reliable method on macOS — no wrapper scripts, no `realpath` issues.
-
-```bash
-# 1. Install uv (skip if already installed)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# 2. Clone repo
-git clone https://github.com/openags/paper-search-mcp.git
-cd paper-search-mcp
-
-# 3. Verify it runs (uv auto-resolves dependencies, no manual install needed)
-uv run -m paper_search_mcp.server
-```
-
-**Claude Desktop config** (replace the directory path with your actual clone location):
-
-```json
-{
-  "mcpServers": {
-    "paper-search-mcp": {
-      "command": "uv",
-      "args": [
-        "run",
-        "--directory", "/path/to/paper-search-mcp",
-        "-m", "paper_search_mcp.server"
-      ],
-      "env": {
-        "PAPER_SEARCH_MCP_UNPAYWALL_EMAIL": "your@email.com",
-        "PAPER_SEARCH_MCP_CORE_API_KEY": "",
-        "PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY": "",
-        "PAPER_SEARCH_MCP_ZENODO_ACCESS_TOKEN": "",
-        "PAPER_SEARCH_MCP_GOOGLE_SCHOLAR_PROXY_URL": "",
-        "PAPER_SEARCH_MCP_IEEE_API_KEY": "",
-        "PAPER_SEARCH_MCP_ACM_API_KEY": ""
-      }
-    }
-  }
-}
-```
-
-For example, if you cloned to `/Users/mac/Pengsong/paper-search-mcp`:
-
-```json
-"args": ["run", "--directory", "/Users/mac/Pengsong/paper-search-mcp", "-m", "paper_search_mcp.server"]
-```
-
-> `uv run` automatically installs dependencies into an isolated environment on first run — no `pip install` or `venv` needed.
-
-For active development, optionally install an editable copy:
-
-```bash
-uv venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-uv pip install -e ".[dev]"
-```
-
----
-
-### Environment Variables (`.env` file)
-
-Instead of putting keys directly in the JSON config you can store them in a `.env` file in the project root (auto-loaded on startup):
-
-```bash
-cp .env.example .env   # if running from source
-# or create ~/.paper-search-mcp.env for global use
-```
-
-```dotenv
-PAPER_SEARCH_MCP_UNPAYWALL_EMAIL=your@email.com
-PAPER_SEARCH_MCP_CORE_API_KEY=
-PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY=
-PAPER_SEARCH_MCP_ZENODO_ACCESS_TOKEN=
-PAPER_SEARCH_MCP_GOOGLE_SCHOLAR_PROXY_URL=
-PAPER_SEARCH_MCP_IEEE_API_KEY=
-PAPER_SEARCH_MCP_ACM_API_KEY=
-```
-
-To use a custom path: `export PAPER_SEARCH_MCP_ENV_FILE=/absolute/path/to/.env`
-
-> Legacy variable names without the `PAPER_SEARCH_MCP_` prefix (e.g. `CORE_API_KEY`, `UNPAYWALL_EMAIL`) are still supported for backward compatibility.
+> The OPAC tools require `pymarc`, `ply`, and PyZ3950 with the `ccl.py` stub —
+> `setup.sh` handles all three. A plain `pip install -r requirements.txt` alone is not
+> sufficient for the catalog tools.
 
 ---
 
 ## Contributing
 
-We welcome contributions! Here's how to get started:
-
-1. **Fork the Repository**:
-   Click "Fork" on GitHub.
-
-2. **Clone and Set Up**:
-
-   ```bash
-   git clone https://github.com/yourusername/paper-search-mcp.git
-   cd paper-search-mcp
-   uv venv && source .venv/bin/activate
-   uv pip install -e ".[dev]"
-   ```
-
-3. **Make Changes**:
-
-   - Add new platforms in `academic_platforms/`.
-   - Update tests in `tests/`.
-
-4. **Submit a Pull Request**:
-   Push changes and create a PR on GitHub.
+1. Fork the repository.
+2. Add new paper platforms in `academic_platforms/`; OPAC logic lives in
+   `paper_search_mcp/opac/`.
+3. Update tests in `tests/`.
+4. Open a pull request.
 
 ---
 
-## Demo
+## License & Attribution
 
-<img src="docs\images\demo.png" alt="Demo" width="800">
+This project is licensed under the MIT License. See the `LICENSE` file.
 
-## TODO
-
-### Planned Academic Platforms
-
-- [√] arXiv
-- [√] PubMed
-- [√] bioRxiv
-- [√] medRxiv
-- [√] Google Scholar
-- [√] IACR ePrint Archive
-- [√] Semantic Scholar
-- [√] Crossref
-- [√] PubMed Central (PMC)
-- [√] CORE
-- [√] Europe PMC
-- [√] Sci-Hub warning and enablement docs
-
-### Development Tasks
-- [√] Fix Async search bugs and ensure reliable fast MCP events
-- [√] End-to-End full pipeline testing script (search, parse, download)
-- [√] Establish two-layer federated architecture (Layer 1 tool: `search_papers`)
-- [√] Ensure pervasive DOI extraction across metadata fields & abstract fallbacks
-- [ ] Citation graph & Paper relation context feature
-- [√] Expand full-stack OpenAlex provider
-
-### Priority Free and Open Sources
-
-- [√] PubMed Central (PMC)
-- [√] CORE
-- [√] OpenAlex
-- [√] Europe PMC
-- [√] OpenAIRE
-- [√] dblp
-- [√] CiteSeerX
-- [√] DOAJ
-- [√] BASE
-- [√] Zenodo
-- [√] HAL
-- [√] SSRN (discovery + best-effort full-text)
-- [√] Unpaywall (standalone DOI search source)
-
-### Optional and Non-Core Integrations
-
-- [ ] ResearchGate
-- [ ] JSTOR
-- [ ] ScienceDirect
-- [ ] Springer Link
-- [√] IEEE Xplore (optional skeleton — activate with `IEEE_API_KEY`)
-- [√] ACM Digital Library (optional skeleton — activate with `ACM_API_KEY`)
-- [ ] Web of Science
-- [ ] Scopus
-
----
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=openags/paper-search-mcp&type=Date)](https://star-history.com/#openags/paper-search-mcp&Date)
-
----
-
-## License
-
-This project is licensed under the MIT License. See the LICENSE file for details.
-
----
-
-Happy researching with `paper-search-mcp`! If you encounter issues, open a GitHub issue.
+It is a fork of [openags/paper-search-mcp](https://github.com/openags/paper-search-mcp)
+(MIT), extended with BHT/KOBV catalog search via Z39.50 and adapted for a single
+remote-connector deployment. The optional Sci-Hub workflow from the upstream project
+has been removed.
