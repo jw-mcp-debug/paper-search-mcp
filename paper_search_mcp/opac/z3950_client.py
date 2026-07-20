@@ -8,17 +8,15 @@ BHT ISIL:    DE-B768 (Bib-1 Attribut 1044)
 
 Voraussetzungen:
     pip install PyZ3950 pymarc ply
-    # ccl.py muss durch Stub ersetzt werden (siehe setup.py)
+    # ccl.py muss durch Stub ersetzt werden (siehe setup.sh)
 """
 
 import io
 import logging
 from typing import Optional
 
-import codecs
 import pymarc
 from PyZ3950 import zoom
-from PyZ3950 import asn1
 
 log = logging.getLogger("z3950_client")
 
@@ -59,7 +57,6 @@ def _pqf(use_attr: int, term: str, isil: Optional[str] = BHT_ISIL) -> str:
 
     Mehrwörtige Terme werden in Anführungszeichen gesetzt.
     """
-    # Terme mit Leerzeichen in Anführungszeichen
     if " " in term:
         term_pqf = f'"{term}"'
     else:
@@ -70,6 +67,41 @@ def _pqf(use_attr: int, term: str, isil: Optional[str] = BHT_ISIL) -> str:
     if isil:
         return f"@and @attr 1={BIB1_ATTR['isil']} {isil} {main}"
     return main
+
+
+# ---------------------------------------------------------------------------
+# Umlaut-Fix für Suchterme
+# ---------------------------------------------------------------------------
+
+def _terme_auf_utf8(node, _seen=None):
+    """
+    Wandelt jeden Suchterm ('general', str) in der RPN-Query rekursiv in
+    UTF-8-Bytes um.
+
+    Hintergrund: PyZ3950 kodiert GeneralString-Terme mangels registriertem
+    Codec als ASCII und bricht bei Umlauten (ä/ö/ü/ß) mit UnicodeEncodeError
+    ab. Der ASN.1-Encoder reicht bytes-Werte jedoch unverändert durch – ein
+    als UTF-8-Bytes vorliegender Term landet also korrekt UTF-8-kodiert auf
+    der Leitung, unabhängig von einer (hier nicht funktionierenden)
+    Zeichensatz-Aushandlung. Offline gegen den echten PyZ3950-Encoder verifiziert.
+    """
+    if _seen is None:
+        _seen = set()
+    if id(node) in _seen:
+        return
+    _seen.add(id(node))
+
+    t = getattr(node, "term", None)
+    if (isinstance(t, tuple) and len(t) == 2
+            and t[0] == "general" and isinstance(t[1], str)):
+        node.term = ("general", t[1].encode("utf-8"))
+
+    if hasattr(node, "__dict__"):
+        for v in vars(node).values():
+            _terme_auf_utf8(v, _seen)
+    elif isinstance(node, (tuple, list)):
+        for x in node:
+            _terme_auf_utf8(x, _seen)
 
 
 # ---------------------------------------------------------------------------
@@ -98,7 +130,6 @@ def _parse_marc(raw_data, isil: Optional[str] = BHT_ISIL) -> dict:
             return {}
 
         def gf(tag: str, code: str = None) -> str:
-            """Erstes Vorkommen eines Feldes oder Unterfeldes."""
             f = record.get(tag)
             if f is None:
                 return ""
@@ -108,7 +139,6 @@ def _parse_marc(raw_data, isil: Optional[str] = BHT_ISIL) -> dict:
             return val.strip() if val else ""
 
         def gfa(tag: str, code: str) -> list:
-            """Alle Vorkommen eines Unterfeldes."""
             return [
                 f.get(code).strip()
                 for f in record.get_fields(tag)
@@ -131,42 +161,50 @@ def _parse_marc(raw_data, isil: Optional[str] = BHT_ISIL) -> dict:
         schlagw  = gfa("650", "a") + gfa("689", "a")
         ppn      = gf("001")
 
-        # === TEMPORAER/DEBUG: komplette Feldstruktur in 'signatur' ===
-        _dbg = []
-        for _f in record.get_fields():
-            try:
-                _tag = str(_f.tag)
-                if _f.is_control_field():
-                    _dbg.append(_tag + ":" + str(_f.data))
-                else:
-                    _parts = []
-                    for _sf in _f.subfields:
-                        try:
-                            _parts.append("$" + str(_sf.code) + str(_sf.value))
-                        except AttributeError:
-                            _parts.append("$" + str(_sf))
-                    _dbg.append(_tag + " " + "".join(_parts))
-            except Exception:
-                _dbg.append("ERR@" + str(getattr(_f, "tag", "?")))
-        signatur = "  |  ".join(_dbg)
-        ddc = ""
+        # --- Bestand & Signatur aus dem lokalen Bestandsfeld 924 ---
+        # WICHTIG: Der KOBV-Verbundkatalog (k2/B3Kat) enthält im 924-Feld der
+        # BHT NUR den Besitznachweis ($b=DE-B768), i.d.R. OHNE lokale Signatur
+        # ($g fehlt). Die genaue Standortsignatur (z.B. "33.12.242-2") liegt
+        # ausschließlich im lokalen BHT-System und ist über diesen Verbund-
+        # Z39.50-Zugang NICHT abrufbar.
+        # Feld 082 ist die Dewey-Klassifikation (z.B. "025.524") und darf NICHT
+        # als Standortsignatur ausgegeben werden.
+        signatur = ""
+        bht_bestand = None
+        for f in record.get_fields("924"):
+            owner = (f.get("b") or "").strip()
+            if isil and owner.upper() == isil.upper():
+                bht_bestand = True
+                sig = (f.get("g") or "").strip()  # lokale Signatur, FALLS geliefert
+                if sig:
+                    signatur = sig
+
+        # Klassifikationen – nur zur Orientierung, NICHT die Standortsignatur
+        ddc = gf("082", "a")
+        rvk = ""
+        for f in record.get_fields("084"):
+            if (f.get("2") or "").strip().lower() == "rvk":
+                rvk = (f.get("a") or "").strip()
+                break
 
         # Bereinigungen
         jahr = jahr.strip(".,©[] ")
 
         return {
-            "titel":        voller_titel or "(kein Titel)",
-            "autoren":      autoren or ["(kein Autor)"],
-            "verlag":       f"{ort}: {verlag}".strip(": ") if verlag else ort,
-            "jahr":         jahr,
-            "auflage":      auflage,
-            "isbn":         isbn,
-            "sprache":      sprache,
-            "umfang":       umfang,
+            "titel":         voller_titel or "(kein Titel)",
+            "autoren":       autoren or ["(kein Autor)"],
+            "verlag":        f"{ort}: {verlag}".strip(": ") if verlag else ort,
+            "jahr":          jahr,
+            "auflage":       auflage,
+            "isbn":          isbn,
+            "sprache":       sprache,
+            "umfang":        umfang,
             "schlagwoerter": schlagw[:8],
-            "signatur":     signatur,
-            "ddc":          ddc,
-            "ppn":          ppn,
+            "signatur":      signatur,      # aus dem Verbund meist leer (siehe oben)
+            "bht_bestand":   bht_bestand,   # True, wenn 924 $b == BHT-ISIL
+            "ddc":           ddc,           # Dewey-Klassifikation (NICHT Signatur)
+            "rvk":           rvk,           # RVK-Notation (NICHT Signatur)
+            "ppn":           ppn,
         }
 
     except Exception as e:
@@ -183,33 +221,20 @@ def suche_bht_sync(use_attr: int, term: str,
                    max_records: int = 10) -> dict:
     """
     Synchrone Z39.50-Suche über PyZ3950.
-
-    Args:
-        use_attr:    Bib-1 Use-Attribut (z.B. 4=Titel, 1=Autor, 1016=Any)
-        term:        Suchbegriff
-        isil:        ISIL für Bestandsfilter (None = Verbundsuche)
-        max_records: Maximale Trefferanzahl
-
-    Returns:
-        dict mit 'treffer_gesamt', 'treffer' (Liste), optional 'fehler'
     """
     pqf_query = _pqf(use_attr, term, isil)
     log.debug(f"PQF: {pqf_query}")
 
     try:
-        # charset="UTF-8" MUSS im Konstruktor stehen (verbindet sofort) — sonst
-        # kodiert PyZ3950 Suchterme als ASCII und Umlaute (ä/ö/ü/ß) brechen ab.
-        conn = zoom.Connection(Z3950_HOST, Z3950_PORT, charset="UTF-8")
+        conn = zoom.Connection(Z3950_HOST, Z3950_PORT)
         conn.databaseName = Z3950_DB
         conn.preferredRecordSyntax = "USMARC"
-        # Umlaut-Fix (robust): NUR den Encode-Kontext fuer GeneralString auf
-        # UTF-8 setzen (keine Nebenwirkung auf Datensatz-Dekodierung). Offline verifiziert.
-        try:
-            conn._cli.encode_ctx.set_codec(asn1.GeneralString, codecs.lookup("utf-8"), 0)
-        except Exception as _e:
-            log.warning(f"UTF-8-Encode-Codec setzen fehlgeschlagen: {_e}")
 
         query = zoom.Query("PQF", pqf_query)
+        # Umlaut-Fix: Suchterme in der RPN-Query auf UTF-8-Bytes umstellen,
+        # damit PyZ3950 sie nicht als ASCII zu kodieren versucht.
+        _terme_auf_utf8(query.query)
+
         res   = conn.search(query)
         total = len(res)
 
@@ -244,8 +269,6 @@ async def suche_bht(use_attr: int, term: str,
                     max_records: int = 10) -> dict:
     """
     Asynchrone Wrapper-Funktion für suche_bht_sync.
-    Führt die synchrone Z39.50-Suche in einem Thread-Pool aus,
-    damit der MCP-Server nicht blockiert.
     """
     import asyncio
     loop = asyncio.get_event_loop()
