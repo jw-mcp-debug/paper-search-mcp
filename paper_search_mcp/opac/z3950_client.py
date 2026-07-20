@@ -202,7 +202,9 @@ def suche_bht_sync(use_attr: int, term: str,
     log.debug(f"PQF: {pqf_query}")
 
     try:
-        conn = zoom.Connection(Z3950_HOST, Z3950_PORT)
+        # charset="UTF-8" MUSS im Konstruktor stehen (verbindet sofort) — sonst
+        # kodiert PyZ3950 Suchterme als ASCII und Umlaute (ä/ö/ü/ß) brechen ab.
+        conn = zoom.Connection(Z3950_HOST, Z3950_PORT, charset="UTF-8")
         conn.databaseName = Z3950_DB
         conn.preferredRecordSyntax = "USMARC"
 
