@@ -129,31 +129,14 @@ def _parse_marc(raw_data, isil: Optional[str] = BHT_ISIL) -> dict:
         schlagw  = gfa("650", "a") + gfa("689", "a")
         ppn      = gf("001")
 
-        # --- Standortsignatur: lokales Bestandsfeld 924 (B3Kat/KOBV) ---
-        # WICHTIG: NICHT Feld 082 (= Dewey-Klassifikation, z.B. "025.524").
-        # 924 ist mehrfach vorhanden (je besitzender Bibliothek); wir nehmen
-        # das Feld der BHT (Unterfeld b == ISIL) und dessen Signatur (g).
-        signatur = ""
-        sig_fallback = ""
-        for f in record.get_fields("924"):
-            sig = (f.get("g") or "").strip()
-            if not sig:
-                continue
-            owner = (f.get("b") or "").strip()
-            if isil and owner.upper() == isil.upper():
-                signatur = sig          # exakter BHT-Bestand
-                break
-            if not sig_fallback:
-                sig_fallback = sig      # erstes verfuegbares 924$g als Rueckfall
-        if not signatur:
-            signatur = sig_fallback
-        # Fallback: Standard-MARC-Bestandsfeld 852 ($h Klassifikation + $i Exemplar)
-        if not signatur:
-            f852 = record.get("852")
-            if f852 is not None:
-                teile = [f852.get(c) for c in ("h", "i", "j")]
-                signatur = " ".join(t.strip() for t in teile if t)
-        # Dewey-Klassifikation separat fuehren (Information, NICHT als Signatur)
+        # === TEMPORAeR/DEBUG: komplette Feldstruktur in 'signatur' ausgeben ===
+        _dbg = []
+        for _f in record.get_fields():
+            try:
+                _dbg.append(str(_f))
+            except Exception:
+                _dbg.append("=" + _f.tag + " <unlesbar>")
+        signatur = "  |  ".join(_dbg)
         ddc = gf("082", "a")
 
         # Bereinigungen
@@ -207,6 +190,12 @@ def suche_bht_sync(use_attr: int, term: str,
         conn = zoom.Connection(Z3950_HOST, Z3950_PORT, charset="UTF-8")
         conn.databaseName = Z3950_DB
         conn.preferredRecordSyntax = "USMARC"
+        # Umlaut-Fix (robust, negotiation-unabhaengig): GeneralString-Codec
+        # hart auf UTF-8. Offline verifiziert.
+        try:
+            conn._cli.set_codec("utf-8", 0)
+        except Exception as _e:
+            log.warning(f"set_codec UTF-8 fehlgeschlagen: {_e}")
 
         query = zoom.Query("PQF", pqf_query)
         res   = conn.search(query)
