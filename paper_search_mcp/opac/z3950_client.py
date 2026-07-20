@@ -15,8 +15,10 @@ import io
 import logging
 from typing import Optional
 
+import codecs
 import pymarc
 from PyZ3950 import zoom
+from PyZ3950 import asn1
 
 log = logging.getLogger("z3950_client")
 
@@ -129,15 +131,25 @@ def _parse_marc(raw_data, isil: Optional[str] = BHT_ISIL) -> dict:
         schlagw  = gfa("650", "a") + gfa("689", "a")
         ppn      = gf("001")
 
-        # === TEMPORAeR/DEBUG: komplette Feldstruktur in 'signatur' ausgeben ===
+        # === TEMPORAER/DEBUG: komplette Feldstruktur in 'signatur' ===
         _dbg = []
         for _f in record.get_fields():
             try:
-                _dbg.append(str(_f))
+                _tag = str(_f.tag)
+                if _f.is_control_field():
+                    _dbg.append(_tag + ":" + str(_f.data))
+                else:
+                    _parts = []
+                    for _sf in _f.subfields:
+                        try:
+                            _parts.append("$" + str(_sf.code) + str(_sf.value))
+                        except AttributeError:
+                            _parts.append("$" + str(_sf))
+                    _dbg.append(_tag + " " + "".join(_parts))
             except Exception:
-                _dbg.append("=" + _f.tag + " <unlesbar>")
+                _dbg.append("ERR@" + str(getattr(_f, "tag", "?")))
         signatur = "  |  ".join(_dbg)
-        ddc = gf("082", "a")
+        ddc = ""
 
         # Bereinigungen
         jahr = jahr.strip(".,©[] ")
@@ -190,12 +202,12 @@ def suche_bht_sync(use_attr: int, term: str,
         conn = zoom.Connection(Z3950_HOST, Z3950_PORT, charset="UTF-8")
         conn.databaseName = Z3950_DB
         conn.preferredRecordSyntax = "USMARC"
-        # Umlaut-Fix (robust, negotiation-unabhaengig): GeneralString-Codec
-        # hart auf UTF-8. Offline verifiziert.
+        # Umlaut-Fix (robust): NUR den Encode-Kontext fuer GeneralString auf
+        # UTF-8 setzen (keine Nebenwirkung auf Datensatz-Dekodierung). Offline verifiziert.
         try:
-            conn._cli.set_codec("utf-8", 0)
+            conn._cli.encode_ctx.set_codec(asn1.GeneralString, codecs.lookup("utf-8"), 0)
         except Exception as _e:
-            log.warning(f"set_codec UTF-8 fehlgeschlagen: {_e}")
+            log.warning(f"UTF-8-Encode-Codec setzen fehlgeschlagen: {_e}")
 
         query = zoom.Query("PQF", pqf_query)
         res   = conn.search(query)
