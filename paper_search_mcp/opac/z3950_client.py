@@ -50,18 +50,12 @@ BIB1_ATTR = {
 _PHRASE_ATTRS = {BIB1_ATTR["subject"], BIB1_ATTR["isbn"]}
 
 
-def _term_clause(use_attr: int, wort: str, trunkierung: bool) -> str:
-    """
-    Baut eine einzelne Term-Klausel '@attr 1=<use> <wort>'.
-    Mit trunkierung=True wird Rechts-Trunkierung ergänzt (Bib-1 Attribut 5=1),
-    z.B. matcht 'Bauphysik' dann auch 'Bauphysikalisch'.
-    """
-    prefix = "@attr 5=1 " if trunkierung else ""
-    return f"{prefix}@attr 1={use_attr} {wort}"
+def _term_clause(use_attr: int, wort: str) -> str:
+    """Baut eine einzelne Term-Klausel '@attr 1=<use> <wort>'."""
+    return f"@attr 1={use_attr} {wort}"
 
 
-def _pqf(use_attr: int, term: str, isil: Optional[str] = BHT_ISIL,
-         trunkierung: bool = False) -> str:
+def _pqf(use_attr: int, term: str, isil: Optional[str] = BHT_ISIL) -> str:
     """
     Baut eine PQF-Suchanfrage (Prefix Query Format).
 
@@ -72,7 +66,9 @@ def _pqf(use_attr: int, term: str, isil: Optional[str] = BHT_ISIL,
     - subject / isbn:        Mehrwort bleibt PHRASE ("...")
       (GND-Schlagwörter sind echte Mehrwort-Phrasen)
 
-    trunkierung=True ergänzt Rechts-Trunkierung je Wort.
+    Hinweis: Der KOBV-Z39.50-Zugang unterstützt KEINE Trunkierung (weder das
+    Bib-1-Attribut 5 noch Platzhalter *,? im Suchwort) – Diagnose "unsupported
+    search". Deshalb ist keine Trunkierung implementiert.
 
     Mit ISIL-Filter wird das Ganze per @and auf den BHT-Bestand eingegrenzt:
         @and @attr 1=1044 DE-B768 <suchausdruck>
@@ -81,14 +77,13 @@ def _pqf(use_attr: int, term: str, isil: Optional[str] = BHT_ISIL,
     woerter = term.split()
 
     if len(woerter) <= 1:
-        # Einzelwort (optional trunkiert)
-        main = _term_clause(use_attr, term, trunkierung)
+        main = _term_clause(use_attr, term)
     elif use_attr in _PHRASE_ATTRS:
-        # Mehrwort-Phrase (GND-Schlagwort / ISBN) – keine Trunkierung
-        main = _term_clause(use_attr, f'"{term}"', False)
+        # Mehrwort-Phrase (GND-Schlagwort / ISBN)
+        main = _term_clause(use_attr, f'"{term}"')
     else:
         # Mehrere Wörter -> UND-Verknüpfung (Rechtsfaltung der @and-Operatoren)
-        clauses = [_term_clause(use_attr, w, trunkierung) for w in woerter]
+        clauses = [_term_clause(use_attr, w) for w in woerter]
         main = clauses[-1]
         for c in reversed(clauses[:-1]):
             main = f"@and {c} {main}"
@@ -247,12 +242,11 @@ def _parse_marc(raw_data, isil: Optional[str] = BHT_ISIL) -> dict:
 
 def suche_bht_sync(use_attr: int, term: str,
                    isil: Optional[str] = BHT_ISIL,
-                   max_records: int = 10,
-                   trunkierung: bool = False) -> dict:
+                   max_records: int = 10) -> dict:
     """
     Synchrone Z39.50-Suche über PyZ3950.
     """
-    pqf_query = _pqf(use_attr, term, isil, trunkierung)
+    pqf_query = _pqf(use_attr, term, isil)
     log.debug(f"PQF: {pqf_query}")
 
     try:
@@ -296,8 +290,7 @@ def suche_bht_sync(use_attr: int, term: str,
 
 async def suche_bht(use_attr: int, term: str,
                     isil: Optional[str] = BHT_ISIL,
-                    max_records: int = 10,
-                    trunkierung: bool = False) -> dict:
+                    max_records: int = 10) -> dict:
     """
     Asynchrone Wrapper-Funktion für suche_bht_sync.
     """
@@ -305,5 +298,5 @@ async def suche_bht(use_attr: int, term: str,
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(
         None,
-        lambda: suche_bht_sync(use_attr, term, isil, max_records, trunkierung)
+        lambda: suche_bht_sync(use_attr, term, isil, max_records)
     )
