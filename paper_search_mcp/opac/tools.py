@@ -109,7 +109,7 @@ def _formatiere_ergebnisse(daten: dict, suchbegriff: str,
             f"Die Suche nach `{suchbegriff}` ergab keine Ergebnisse.\n\n"
             f"**Tipps zur Verbesserung der Suche:**\n"
             f"- Suchbegriffe vereinfachen oder englische Synonyme verwenden\n"
-            f"- `trunkierung=True` setzen: `Bauphysik` matcht dann auch `Bauphysikalisch`\n"
+            f"- Weniger, dafür zentrale Begriffe verwenden (Wörter werden UND-verknüpft)\n"
             f"- Anderen Suchtyp probieren: Autor statt Titel, oder Schlagwort\n"
             f"- Verbundsuche: Titel aus anderen Berliner Bibliotheken per Fernleihe"
         )
@@ -171,15 +171,6 @@ class OpacSucheInput(BaseModel):
         description=(
             "True (Standard): Nur Titel im BHT-Bestand (ISIL DE-B768). "
             "False: Gesamter KOBV-Verbund (für Fernleihe-Recherche)."
-        ),
-    )
-    trunkierung: bool = Field(
-        default=False,
-        description=(
-            "False (Standard): exakte Wortübereinstimmung. "
-            "True: Rechts-Trunkierung – z.B. matcht 'Bauphysik' dann auch "
-            "'Bauphysikalisch'. Sinnvoll für breitere Treffer bei deutschen "
-            "Komposita/Wortformen; nicht bei 'subject'/ISBN nötig."
         ),
     )
 
@@ -247,7 +238,6 @@ def register_opac_tools(mcp):
             term=params.suchbegriff,
             isil=isil,
             max_records=params.max_treffer,
-            trunkierung=params.trunkierung,
         )
         return _formatiere_ergebnisse(daten, params.suchbegriff, modus)
 
