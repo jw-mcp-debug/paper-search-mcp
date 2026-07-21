@@ -45,24 +45,53 @@ BIB1_ATTR = {
 # PQF-Query-Bau
 # ---------------------------------------------------------------------------
 
-def _pqf(use_attr: int, term: str, isil: Optional[str] = BHT_ISIL) -> str:
+# Felder, bei denen Mehrwort-Eingaben als PHRASE (nicht als UND) gesucht werden:
+# subject = GND-Schlagwort (echte Mehrwort-Phrasen), isbn = einzelner Token.
+_PHRASE_ATTRS = {BIB1_ATTR["subject"], BIB1_ATTR["isbn"]}
+
+
+def _term_clause(use_attr: int, wort: str, trunkierung: bool) -> str:
+    """
+    Baut eine einzelne Term-Klausel '@attr 1=<use> <wort>'.
+    Mit trunkierung=True wird Rechts-Trunkierung ergänzt (Bib-1 Attribut 5=1),
+    z.B. matcht 'Bauphysik' dann auch 'Bauphysikalisch'.
+    """
+    prefix = "@attr 5=1 " if trunkierung else ""
+    return f"{prefix}@attr 1={use_attr} {wort}"
+
+
+def _pqf(use_attr: int, term: str, isil: Optional[str] = BHT_ISIL,
+         trunkierung: bool = False) -> str:
     """
     Baut eine PQF-Suchanfrage (Prefix Query Format).
 
-    Mit ISIL-Filter (AND-Verknüpfung):
-        @and @attr 1=1044 DE-B768 @attr 1=<use> <term>
+    Mehrwort-Verhalten (der eigentliche Trefferquoten-Hebel):
+    - any / title / author:  Wörter werden UND-verknüpft
+        @and @attr 1=<use> Wort1 @attr 1=<use> Wort2
+      (findet Titel, in denen beide Begriffe vorkommen – nicht nur als Phrase)
+    - subject / isbn:        Mehrwort bleibt PHRASE ("...")
+      (GND-Schlagwörter sind echte Mehrwort-Phrasen)
 
-    Ohne ISIL-Filter (Verbundsuche):
-        @attr 1=<use> <term>
+    trunkierung=True ergänzt Rechts-Trunkierung je Wort.
 
-    Mehrwörtige Terme werden in Anführungszeichen gesetzt.
+    Mit ISIL-Filter wird das Ganze per @and auf den BHT-Bestand eingegrenzt:
+        @and @attr 1=1044 DE-B768 <suchausdruck>
     """
-    if " " in term:
-        term_pqf = f'"{term}"'
-    else:
-        term_pqf = term
+    term = term.strip()
+    woerter = term.split()
 
-    main = f"@attr 1={use_attr} {term_pqf}"
+    if len(woerter) <= 1:
+        # Einzelwort (optional trunkiert)
+        main = _term_clause(use_attr, term, trunkierung)
+    elif use_attr in _PHRASE_ATTRS:
+        # Mehrwort-Phrase (GND-Schlagwort / ISBN) – keine Trunkierung
+        main = _term_clause(use_attr, f'"{term}"', False)
+    else:
+        # Mehrere Wörter -> UND-Verknüpfung (Rechtsfaltung der @and-Operatoren)
+        clauses = [_term_clause(use_attr, w, trunkierung) for w in woerter]
+        main = clauses[-1]
+        for c in reversed(clauses[:-1]):
+            main = f"@and {c} {main}"
 
     if isil:
         return f"@and @attr 1={BIB1_ATTR['isil']} {isil} {main}"
@@ -218,11 +247,12 @@ def _parse_marc(raw_data, isil: Optional[str] = BHT_ISIL) -> dict:
 
 def suche_bht_sync(use_attr: int, term: str,
                    isil: Optional[str] = BHT_ISIL,
-                   max_records: int = 10) -> dict:
+                   max_records: int = 10,
+                   trunkierung: bool = False) -> dict:
     """
     Synchrone Z39.50-Suche über PyZ3950.
     """
-    pqf_query = _pqf(use_attr, term, isil)
+    pqf_query = _pqf(use_attr, term, isil, trunkierung)
     log.debug(f"PQF: {pqf_query}")
 
     try:
@@ -266,7 +296,8 @@ def suche_bht_sync(use_attr: int, term: str,
 
 async def suche_bht(use_attr: int, term: str,
                     isil: Optional[str] = BHT_ISIL,
-                    max_records: int = 10) -> dict:
+                    max_records: int = 10,
+                    trunkierung: bool = False) -> dict:
     """
     Asynchrone Wrapper-Funktion für suche_bht_sync.
     """
@@ -274,5 +305,5 @@ async def suche_bht(use_attr: int, term: str,
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(
         None,
-        lambda: suche_bht_sync(use_attr, term, isil, max_records)
+        lambda: suche_bht_sync(use_attr, term, isil, max_records, trunkierung)
     )
