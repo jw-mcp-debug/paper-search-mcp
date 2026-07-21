@@ -3,10 +3,9 @@ opac/tools.py
 =============
 OPAC-/KOBV-Werkzeuge (Z39.50) für die kombinierte BHT-Recherche.
 
-Die vier Tools werden NICHT auf Modulebene registriert, sondern über
-`register_opac_tools(mcp)` auf eine bereits bestehende FastMCP-Instanz
+Die vier Tools werden über `register_opac_tools(mcp)` auf eine bereits bestehende FastMCP-Instanz
 gehängt. Dadurch teilen sie sich denselben Server-Prozess mit der
-Paper-Suche – ein Connector, ein Endpunkt, alle Tools.
+Paper-Suche.
 
 Einbindung im Haupt-Server (paper_search_mcp/server.py), direkt nach
 `mcp = FastMCP(...)`:
@@ -31,11 +30,7 @@ from .z3950_client import suche_bht, BIB1_ATTR, BHT_ISIL
 def _opac_link(isbn: str) -> str:
     """
     Baut einen Deep-Link in den lokalen BHT-webOPAC über die ISBN (Kategorie 540).
-    Der webOPAC eröffnet bei Aufruf selbst eine Session; ein CSId-Token ist nicht
-    nötig. Format bestätigt: start.do?Query=540="<ISBN>" (Quotes als %22 kodiert).
-
-    Im KOBV-Verbund fehlt die lokale Standortsignatur – über diesen Link kommt
-    man direkt zum Titel im lokalen Katalog, wo Signatur und Verfügbarkeit stehen.
+    Der webOPAC eröffnet bei Aufruf selbst eine Session
     """
     isbn_clean = (isbn or "").replace("-", "").replace(" ", "").strip()
     if not isbn_clean:
