@@ -1,5 +1,6 @@
 from typing import List, Optional
 from datetime import datetime
+import os
 import requests
 import logging
 from ..paper import Paper
@@ -16,10 +17,25 @@ class OpenAlexSearcher(PaperSource):
 
     def __init__(self):
         self.session = requests.Session()
-        # OpenAlex encourages providing an email in User-Agent for the "polite pool"
-        self.session.headers.update(
-            {"User-Agent": "paper-search-mcp/1.0 (mailto:openags@example.com)"}
-        )
+        self.session.headers.update({"User-Agent": "paper-search-mcp/1.0"})
+
+        # Seit 13.02.2026 verlangt die OpenAlex-API einen (kostenlosen) API-Key.
+        # Ohne Key gibt es nur 100 Credits/Tag (eine Suche kostet 10) und danach
+        # HTTP 409 -> leere Trefferlisten. Der "polite pool" (mailto-Parameter)
+        # wurde abgeschafft.
+        # Key NICHT im Code hinterlegen, sondern als Umgebungsvariable setzen.
+        self.api_key = (
+            os.environ.get("PAPER_SEARCH_MCP_OPENALEX_API_KEY")
+            or os.environ.get("OPENALEX_API_KEY")
+            or ""
+        ).strip()
+
+        if not self.api_key:
+            logger.warning(
+                "Kein OpenAlex-API-Key gesetzt "
+                "(PAPER_SEARCH_MCP_OPENALEX_API_KEY). Die Suche ist auf ca. 10 "
+                "Anfragen pro Tag begrenzt und liefert danach keine Treffer mehr."
+            )
 
     def _reconstruct_abstract(self, inverted_index: dict) -> str:
         """
@@ -58,11 +74,27 @@ class OpenAlexSearcher(PaperSource):
                 "search": query,
                 "per_page": min(max_results, 200),
             }
+            if self.api_key:
+                params["api_key"] = self.api_key
 
             response = self.session.get(self.BASE_URL, params=params, timeout=30)
-            
+
             if response.status_code != 200:
-                logger.error(f"OpenAlex search failed with status {response.status_code}")
+                if response.status_code == 409:
+                    logger.error(
+                        "OpenAlex: Credit-Kontingent aufgebraucht (HTTP 409). "
+                        "Ohne API-Key sind nur ca. 10 Suchen pro Tag moeglich. "
+                        "Bitte PAPER_SEARCH_MCP_OPENALEX_API_KEY setzen."
+                    )
+                elif response.status_code == 429:
+                    logger.error(
+                        "OpenAlex: Rate-Limit erreicht (HTTP 429). "
+                        "Spaeter erneut versuchen oder Anfragen drosseln."
+                    )
+                else:
+                    logger.error(
+                        f"OpenAlex search failed with status {response.status_code}"
+                    )
                 return papers
 
             data = response.json()
