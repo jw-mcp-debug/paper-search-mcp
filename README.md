@@ -31,6 +31,7 @@ connector) and used through Claude with the staged `agentische-recherche` workfl
 - [Known Upstream Limitations](#known-upstream-limitations)
 - [Deployment (Render, remote connector)](#deployment-render-remote-connector)
 - [Local Development (stdio)](#local-development-stdio)
+- [Version Bump & Release](#version-bump--release)
 - [Contributing](#contributing)
 - [License & Attribution](#license--attribution)
 
@@ -283,6 +284,38 @@ Claude Desktop config (stdio):
 > The OPAC tools require `pymarc`, `ply`, and PyZ3950 with the `ccl.py` stub —
 > `setup.sh` handles all three. A plain `pip install -r requirements.txt` alone is not
 > sufficient for the catalog tools.
+
+## Version Bump & Release
+
+The product version is defined in `pyproject.toml` under `[project].version`.
+Release publishing is triggered by pushing a Git tag that matches `v*.*.*`; the
+GitHub workflow builds the package and uploads the distributions to a GitHub
+Release for that tag.
+
+Minimal release procedure:
+
+```bash
+# 1. Choose the new version, for example 0.1.5
+
+# 2. Edit pyproject.toml:
+# version = "0.1.5"
+
+# 3. Refresh uv.lock so its paper-search-mcp package entry matches
+uv lock
+
+# 4. Commit the version bump
+git add pyproject.toml uv.lock README.md
+git commit -m "Bump version to 0.1.5"
+
+# 5. Create and push the release tag
+git tag v0.1.5
+git push origin main
+git push origin v0.1.5
+```
+
+If the release branch is not `main`, replace `main` with the active release
+branch. Do not push the tag until the version commit has been pushed, because the
+tag is what starts the publish workflow.
 
 ---
 
