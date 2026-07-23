@@ -20,6 +20,20 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
+      - name: Install dependencies
+        run: |
+          bash setup.sh
+          python -m pip install pytest
+
+      - name: Run tests
+        run: >
+          python -m pytest
+          tests/test_config_env.py
+          tests/test_unpaywall.py
+          tests/test_acm.py
+          tests/test_ieee.py
+          -x -q --tb=short
+
       - name: Build package
         run: uv build
 
