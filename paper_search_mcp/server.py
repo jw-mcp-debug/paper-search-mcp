@@ -10,8 +10,6 @@ from .config import get_env
 from .academic_platforms.arxiv import ArxivSearcher
 from .academic_platforms.pubmed import PubMedSearcher
 from .academic_platforms.biorxiv import BioRxivSearcher
-from .academic_platforms.medrxiv import MedRxivSearcher
-from .academic_platforms.google_scholar import GoogleScholarSearcher
 from .academic_platforms.iacr import IACRSearcher
 from .academic_platforms.semantic import SemanticSearcher
 from .academic_platforms.crossref import CrossRefSearcher
@@ -19,19 +17,13 @@ from .academic_platforms.openalex import OpenAlexSearcher
 from .academic_platforms.pmc import PMCSearcher
 from .academic_platforms.core import CORESearcher
 from .academic_platforms.europepmc import EuropePMCSearcher
-# from .academic_platforms.sci_hub import SciHubFetcher
 from .academic_platforms.dblp import DBLPSearcher
 from .academic_platforms.openaire import OpenAiresearcher
-from .academic_platforms.citeseerx import CiteSeerXSearcher
 from .academic_platforms.doaj import DOAJSearcher
-from .academic_platforms.base_search import BASESearcher
 from .academic_platforms.unpaywall import UnpaywallResolver, UnpaywallSearcher
 from .academic_platforms.zenodo import ZenodoSearcher
-from .academic_platforms.hal import HALSearcher
-from .academic_platforms.ssrn import SSRNSearcher
 from .utils import extract_doi
 
-# from .academic_platforms.hub import SciHubSearcher
 from .paper import Paper
 
 # Initialize MCP server
@@ -46,8 +38,6 @@ logger = logging.getLogger(__name__)
 arxiv_searcher = ArxivSearcher()
 pubmed_searcher = PubMedSearcher()
 biorxiv_searcher = BioRxivSearcher()
-medrxiv_searcher = MedRxivSearcher()
-google_scholar_searcher = GoogleScholarSearcher()
 iacr_searcher = IACRSearcher()
 semantic_searcher = SemanticSearcher()
 crossref_searcher = CrossRefSearcher()
@@ -57,15 +47,10 @@ core_searcher = CORESearcher()
 europepmc_searcher = EuropePMCSearcher()
 dblp_searcher = DBLPSearcher()
 openaire_searcher = OpenAiresearcher()
-citeseerx_searcher = CiteSeerXSearcher()
 doaj_searcher = DOAJSearcher()
-base_searcher = BASESearcher()
 unpaywall_resolver = UnpaywallResolver()
 unpaywall_searcher = UnpaywallSearcher(resolver=unpaywall_resolver)
 zenodo_searcher = ZenodoSearcher()
-hal_searcher = HALSearcher()
-ssrn_searcher = SSRNSearcher()
-# scihub_searcher = SciHubSearcher()
 
 
 # Asynchronous helper to adapt synchronous searchers
@@ -85,7 +70,6 @@ ALL_SOURCES = [
     "pubmed",
     "biorxiv",
     "medrxiv",
-    "google_scholar",
     "iacr",
     "semantic",
     "crossref",
@@ -95,12 +79,10 @@ ALL_SOURCES = [
     "europepmc",
     "dblp",
     "openaire",
-    "citeseerx",
     "doaj",
     "base",
     "zenodo",
     "hal",
-    "ssrn",
     "unpaywall",
 ]
 
@@ -284,8 +266,6 @@ async def search_papers(
             task_map[source] = search_biorxiv(query, max_results_per_source)
         elif source == "medrxiv":
             task_map[source] = search_medrxiv(query, max_results_per_source)
-        elif source == "google_scholar":
-            task_map[source] = search_google_scholar(query, max_results_per_source)
         elif source == "iacr":
             task_map[source] = search_iacr(query, max_results_per_source, fetch_details=False)
         elif source == "semantic":
@@ -304,8 +284,6 @@ async def search_papers(
             task_map[source] = search_dblp(query, max_results_per_source)
         elif source == "openaire":
             task_map[source] = search_openaire(query, max_results_per_source)
-        elif source == "citeseerx":
-            task_map[source] = search_citeseerx(query, max_results_per_source)
         elif source == "doaj":
             task_map[source] = search_doaj(query, max_results_per_source)
         elif source == "base":
@@ -314,8 +292,6 @@ async def search_papers(
             task_map[source] = search_zenodo(query, max_results_per_source)
         elif source == "hal":
             task_map[source] = search_hal(query, max_results_per_source)
-        elif source == "ssrn":
-            task_map[source] = search_ssrn(query, max_results_per_source)
         elif source == "unpaywall":
             task_map[source] = search_unpaywall(query, max_results_per_source)
         elif source == "ieee":
@@ -423,20 +399,6 @@ async def search_medrxiv(query: str, max_results: int = 10) -> List[Dict]:
         List of paper metadata in dictionary format.
     """
     papers = await async_search(medrxiv_searcher, query, max_results)
-    return papers if papers else []
-
-
-@mcp.tool()
-async def search_google_scholar(query: str, max_results: int = 10) -> List[Dict]:
-    """Search academic papers from Google Scholar.
-
-    Args:
-        query: Search query string (e.g., 'machine learning').
-        max_results: Maximum number of papers to return (default: 10).
-    Returns:
-        List of paper metadata in dictionary format.
-    """
-    papers = await async_search(google_scholar_searcher, query, max_results)
     return papers if papers else []
 
 
@@ -735,28 +697,6 @@ async def download_crossref(paper_id: str, save_path: str = "./downloads") -> st
         return str(e)
 
 
-# @mcp.tool()
-# async def download_scihub(
-#     identifier: str,
-#    save_path: str = "./downloads",
-#    base_url: str = "https://sci-hub.se",
-#) -> str:
-#    """Download paper PDF via Sci-Hub (optional fallback connector).
-#
-#    Args:
-#        identifier: DOI, title, PMID, or paper URL.
-#        save_path: Directory to save the PDF.
-#        base_url: Sci-Hub mirror URL.
-#    Returns:
-#        Downloaded PDF path on success; error message on failure.
-#    """
-#    fetcher = SciHubFetcher(base_url=base_url, output_dir=save_path)
-#    result = await asyncio.to_thread(fetcher.download_pdf, identifier)
-#    if result:
-#        return result
-#    return "Sci-Hub download failed. Try DOI first, then title, or change mirror URL."
-
-
 @mcp.tool()
 async def download_with_fallback(
     source: str,
@@ -764,19 +704,19 @@ async def download_with_fallback(
     doi: str = "",
     title: str = "",
     save_path: str = "./downloads",
-    use_scihub: bool = False,
-    scihub_base_url: str = "https://sci-hub.se",
 ) -> str:
-    """Try source-native download, OA repositories, Unpaywall, then optional Sci-Hub.
+    """Try source-native download, then OA repositories, then Unpaywall.
+
+    Bewusste Grenze dieses Dienstes: Es werden ausschliesslich legale,
+    frei zugaengliche Volltexte beruecksichtigt. Schattenbibliotheken
+    (z. B. Sci-Hub) sind nicht Teil der Fallback-Kette.
 
     Args:
-        source: Source name (arxiv, biorxiv, medrxiv, iacr, semantic, crossref, pubmed, pmc, core, europepmc, citeseerx, doaj, base, zenodo, hal, ssrn).
+        source: Source name (arxiv, biorxiv, iacr, semantic, crossref, pubmed, pmc, core, europepmc, doaj, zenodo).
         paper_id: Source-native paper identifier.
-        doi: Optional DOI used for repository/unpaywall/Sci-Hub fallback.
-        title: Optional title used for repository/Sci-Hub fallback when DOI is unavailable.
+        doi: Optional DOI used for repository/Unpaywall fallback.
+        title: Optional title used for repository fallback when DOI is unavailable.
         save_path: Directory to save downloaded files.
-        use_scihub: Whether to fallback to Sci-Hub after OA attempts fail.
-        scihub_base_url: Sci-Hub mirror URL for fallback.
     Returns:
         Download path on success or explanatory error message.
     """
@@ -793,12 +733,10 @@ async def download_with_fallback(
         "pmc": pmc_searcher.download_pdf,
         "core": core_searcher.download_pdf,
         "europepmc": europepmc_searcher.download_pdf,
-        "citeseerx": citeseerx_searcher.download_pdf,
         "doaj": doaj_searcher.download_pdf,
         "base": base_searcher.download_pdf,
         "zenodo": zenodo_searcher.download_pdf,
         "hal": hal_searcher.download_pdf,
-        "ssrn": ssrn_searcher.download_pdf,
     }
 
     attempt_errors: List[str] = []
@@ -838,16 +776,7 @@ async def download_with_fallback(
     else:
         attempt_errors.append("unpaywall: DOI not provided")
 
-    if not use_scihub:
-        return "Download failed after OA fallback chain. Details: " + " | ".join(attempt_errors)
-
-    fallback_identifier = (doi or "").strip() or (title or "").strip() or paper_id
-    fetcher = SciHubFetcher(base_url=scihub_base_url, output_dir=save_path)
-    fallback_result = await asyncio.to_thread(fetcher.download_pdf, fallback_identifier)
-    if fallback_result:
-        return fallback_result
-
-    return "Download failed after OA fallback chain and Sci-Hub fallback. Details: " + " | ".join(attempt_errors)
+    return "Download failed after OA fallback chain. Details: " + " | ".join(attempt_errors)
 
 
 @mcp.tool()
@@ -952,20 +881,6 @@ async def search_openaire(query: str, max_results: int = 10) -> List[Dict]:
 
 
 @mcp.tool()
-async def search_citeseerx(query: str, max_results: int = 10) -> List[Dict]:
-    """Search academic papers from CiteSeerX digital library.
-
-    Args:
-        query: Search query string (e.g., 'machine learning').
-        max_results: Maximum number of papers to return (default: 10).
-    Returns:
-        List of paper metadata in dictionary format.
-    """
-    papers = await async_search(citeseerx_searcher, query, max_results)
-    return papers if papers else []
-
-
-@mcp.tool()
 async def search_doaj(query: str, max_results: int = 10) -> List[Dict]:
     """Search academic papers from DOAJ (Directory of Open Access Journals).
 
@@ -1018,22 +933,6 @@ async def search_hal(query: str, max_results: int = 10) -> List[Dict]:
         List of paper metadata in dictionary format.
     """
     papers = await async_search(hal_searcher, query, max_results)
-    return papers if papers else []
-
-
-@mcp.tool()
-async def search_ssrn(query: str, max_results: int = 10) -> List[Dict]:
-    """Search metadata records from SSRN.
-
-    Note: SSRN connector is metadata-only and does not support direct PDF download.
-
-    Args:
-        query: Search query string (e.g., 'machine learning').
-        max_results: Maximum number of papers to return (default: 10).
-    Returns:
-        List of paper metadata in dictionary format.
-    """
-    papers = await async_search(ssrn_searcher, query, max_results)
     return papers if papers else []
 
 
@@ -1110,32 +1009,6 @@ async def download_openaire(paper_id: str, save_path: str = "./downloads") -> st
         str: Path to downloaded PDF or error message.
     """
     return openaire_searcher.download_pdf(paper_id, save_path)
-
-
-@mcp.tool()
-async def read_citeseerx_paper(paper_id: str, save_path: str = "./downloads") -> str:
-    """Read and extract text content from a CiteSeerX paper.
-
-    Args:
-        paper_id: CiteSeerX paper identifier.
-        save_path: Directory where the PDF is/will be saved (default: './downloads').
-    Returns:
-        str: Extracted text or fallback abstract/error message.
-    """
-    return citeseerx_searcher.read_paper(paper_id, save_path)
-
-
-@mcp.tool()
-async def download_citeseerx(paper_id: str, save_path: str = "./downloads") -> str:
-    """Download PDF for a paper from CiteSeerX.
-
-    Args:
-        paper_id: CiteSeerX paper identifier.
-        save_path: Directory to save the PDF (default: './downloads').
-    Returns:
-        str: Path to downloaded PDF or error message.
-    """
-    return citeseerx_searcher.download_pdf(paper_id, save_path)
 
 
 @mcp.tool()
@@ -1240,36 +1113,6 @@ async def download_hal(paper_id: str, save_path: str = "./downloads") -> str:
         str: Path to downloaded PDF.
     """
     return hal_searcher.download_pdf(paper_id, save_path)
-
-
-@mcp.tool()
-async def read_ssrn_paper(paper_id: str, save_path: str = "./downloads") -> str:
-    """Read paper content from SSRN.
-
-    Note: SSRN connector is metadata-only and read is not supported.
-
-    Args:
-        paper_id: SSRN paper identifier.
-        save_path: Directory where the PDF is/will be saved (unused).
-    Returns:
-        str: Error message from metadata-only SSRN connector.
-    """
-    return ssrn_searcher.read_paper(paper_id, save_path)
-
-
-@mcp.tool()
-async def download_ssrn(paper_id: str, save_path: str = "./downloads") -> str:
-    """Download PDF for a paper from SSRN.
-
-    Note: SSRN connector is metadata-only and download is not supported.
-
-    Args:
-        paper_id: SSRN paper identifier.
-        save_path: Directory to save the PDF (unused).
-    Returns:
-        str: Error message from metadata-only SSRN connector.
-    """
-    return ssrn_searcher.download_pdf(paper_id, save_path)
 
 
 @mcp.tool()
