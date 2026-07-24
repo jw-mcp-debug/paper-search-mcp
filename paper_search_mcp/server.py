@@ -31,8 +31,12 @@ mcp = FastMCP("paper_search_server")
 #adding KOBV OPAC Search
 from paper_search_mcp.opac.tools import register_opac_tools
 register_opac_tools(mcp)
+ 
+# adding citation chaining (OpenAlex graph)
+from paper_search_mcp.citations.tools import register_citation_tools
+register_citation_tools(mcp)
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__) 
 
 # Instances of searchers
 arxiv_searcher = ArxivSearcher()
