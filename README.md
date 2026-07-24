@@ -16,12 +16,14 @@ connector) and used through Claude with the staged `agentische-recherche` workfl
 
 ![Python](https://img.shields.io/badge/python-3.10+-blue.svg) ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
+Release history and breaking changes are documented in [`CHANGELOG.md`](CHANGELOG.md).
+
 ---
 
 ## Table of Contents
 
 - [Overview](#overview)
-- [Scope: find, don't acquire](#scope-find-dont-acquire)
+- [Scope: legal sources only](#scope-legal-sources-only)
 - [Project Principles](#project-principles)
 - [Features](#features)
 - [Library Catalog (OPAC / KOBV)](#library-catalog-opac--kobv)
@@ -49,25 +51,27 @@ The intended interaction pattern is the `agentische-recherche` skill: OPAC first
 (German foundational literature, BHT holdings), then targeted paper search (current
 research), then a synthesis with source links.
 
-## Scope: find, don't acquire
+## Scope: legal sources only
 
-This deployment is a **discovery** service. It locates literature and returns links
-to the source — it does **not** acquire full text on the user's behalf.
+This is primarily a **discovery** service: it locates literature and returns links
+to the source. Where a full text is legally and freely available, the download tools
+can retrieve it.
 
-- No Sci-Hub or other shadow-library paths are used. The optional Sci-Hub fallback
-  from the upstream project has been removed/disabled in this fork.
-- The download/read tools inherited from upstream are **not part of the BHT
-  workflow**; the `agentische-recherche` skill calls only the search tools.
-- Full text is reached through the library's legitimate channels: open-access links
-  (DOI), the BHT e-resources (EZB/DBIS, Shibboleth/VPN), or interlibrary loan
-  (Fernleihe via the KOBV portal).
+- **No shadow libraries.** Sci-Hub support has been removed entirely — the tool, the
+  fallback path, and the hard-coded mirror URL (see `CHANGELOG.md`, 0.2.0).
+- **No circumvention of licences or paywalls.** Downloads are limited to open-access
+  material and publisher open-access links.
+- **Licensed full text stays with the library.** It is reached through the BHT
+  e-resources (EZB/DBIS, Shibboleth/VPN) or interlibrary loan (Fernleihe via the
+  KOBV portal), not through this service.
 
 ## Project Principles
 
 - **Free-First**: Public and open sources are the default. Paid or restricted
   sources are not the core direction.
-- **Find, not acquire**: The server resolves *where* literature is, not *the file
-  itself*. Full-text access stays with the library's licensed routes.
+- **Legal sources only**: The server resolves *where* literature is and can fetch
+  it where it is legally free. Access to licensed material stays with the
+  library's own routes.
 - **Optional API Keys**: Keys are supported only where they improve stability, rate
   limits, or metadata quality. The server is usable without them.
 - **Source Transparency**: Different sources have different strengths; the server
@@ -88,7 +92,7 @@ to the source — it does **not** acquire full text on the user's behalf.
   union catalog for interlibrary loan.
 - **Multi-source paper coverage**: arXiv, PubMed, bioRxiv, medRxiv, IACR ePrint,
   Semantic Scholar, Crossref, OpenAlex, PMC, CORE, Europe PMC, dblp, OpenAIRE,
-  CiteSeerX, DOAJ, BASE, Zenodo, HAL, SSRN, Unpaywall (DOI lookup).
+  DOAJ, BASE, Zenodo, HAL, Unpaywall (DOI lookup).
 - **Standardized output**: papers are returned in a consistent dictionary format.
 - **Remote-ready transport**: runs over streamable-HTTP, deployable as a single
   always-on endpoint and added to Claude as one custom connector.
@@ -120,13 +124,11 @@ The catalog tools query the KOBV Z39.50 server and parse MARC21 records.
 The goal is not to depend on one engine, but to combine free and public sources with
 clear roles:
 
-- **Open metadata backbone**: Crossref, OpenAlex, Semantic Scholar, dblp, CiteSeerX,
-  SSRN, Unpaywall (DOI-centric OA metadata).
+- **Open metadata backbone**: Crossref, OpenAlex, Semantic Scholar, dblp,
+  Unpaywall (DOI-centric OA metadata).
 - **Discipline-specific sources**: arXiv, PubMed, PubMed Central, Europe PMC, IACR.
 - **Open-access full-text sources**: arXiv, PMC, CORE, OpenAIRE, DOAJ, BASE, Zenodo,
   HAL, publisher open-access links.
-- **Discovery / DOI recovery**: Google Scholar for finding titles, versions, and DOI
-  clues when other public metadata is incomplete.
 
 For topic searches a clean, targeted core (`crossref,openalex,doaj`) is recommended,
 extended by discipline (`arxiv` for CS/maths/physics; `pubmed`/`europepmc` for
@@ -143,7 +145,6 @@ observed under normal conditions.
 | PubMed | ✅ | ❌ | ⚠️ info-only | Open API; reliable |
 | bioRxiv | ✅ | ✅ | ✅ | Open API; reliable |
 | medRxiv | ✅ | ✅ | ✅ | Open API; reliable |
-| Google Scholar | ⚠️ | ❌ | ❌ | Bot-detection active; set `PAPER_SEARCH_MCP_GOOGLE_SCHOLAR_PROXY_URL` |
 | IACR | ✅ | ✅ | ✅ | Open API; reliable |
 | Semantic Scholar | ✅ | ✅ (OA) | ✅ (OA) | Works without key (rate-limited); key improves limits |
 | Crossref | ✅ | ❌ | ⚠️ info-only | Open API; reliable |
@@ -153,21 +154,19 @@ observed under normal conditions.
 | Europe PMC | ✅ | ✅ (OA) | ✅ (OA) | OA PDFs only |
 | dblp | ✅ | ❌ | ⚠️ info-only | Open API; reliable |
 | OpenAIRE | ✅ | ❌ | ❌ | Open API; transient 403 retried |
-| CiteSeerX | ⚠️ | ✅ (record-dependent) | ⚠️ | Endpoint intermittently unavailable |
 | DOAJ | ✅ | ⚠️ (URL-dependent) | ⚠️ (URL-dependent) | PDF availability varies; free key raises limits |
 | BASE | ⚠️ | ✅ (record-dependent) | ✅ (record-dependent) | OAI-PMH requires institutional IP registration |
 | Zenodo | ✅ | ✅ (record-dependent) | ✅ (record-dependent) | Open API; reliable |
 | HAL | ✅ | ✅ (record-dependent) | ✅ (record-dependent) | Open API; reliable |
-| SSRN | ⚠️ | ⚠️ best-effort | ⚠️ best-effort | 403 bot-detection; public PDF only |
 | Unpaywall | ✅ (DOI lookup) | ❌ | ❌ | **Requires** `PAPER_SEARCH_MCP_UNPAYWALL_EMAIL` |
 | **IEEE Xplore** 🔑 | 🚧 skeleton | 🚧 skeleton | 🚧 skeleton | Requires `PAPER_SEARCH_MCP_IEEE_API_KEY` to activate |
 | **ACM DL** 🔑 | 🚧 skeleton | 🚧 skeleton | 🚧 skeleton | Requires `PAPER_SEARCH_MCP_ACM_API_KEY` to activate |
 
 > ✅ = reliable in live tests. ⚠️ = works but subject to upstream instability. ❌ = not supported. 🔑 = key required. 🚧 = skeleton only.
 >
-> Note on the download/read columns: these reflect upstream capability. In the BHT
-> deployment the workflow is search/discovery only — download/read tools are not used
-> (see [Scope](#scope-find-dont-acquire)).
+> Note on the download/read columns: these reflect upstream capability. Downloads are
+> restricted to legally free material (see [Scope](#scope-legal-sources-only)); the
+> `agentische-recherche` workflow itself only calls the search tools.
 
 ---
 
@@ -180,9 +179,9 @@ needs **no** key — the KOBV Z39.50 endpoint is public.
 | Environment Variable | Provider | Required? | How to obtain |
 |---|---|---|---|
 | `PAPER_SEARCH_MCP_UNPAYWALL_EMAIL` | Unpaywall | Recommended (Unpaywall skipped without it) | Any valid email; register at [unpaywall.org](https://unpaywall.org/products/api) |
+| `PAPER_SEARCH_MCP_OPENALEX_API_KEY` | OpenAlex | **Effectively required** (see note) | Free at [openalex.org](https://openalex.org/) |
 | `PAPER_SEARCH_MCP_CORE_API_KEY` | CORE | Optional | Free at [core.ac.uk/services/api](https://core.ac.uk/services/api) |
 | `PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY` | Semantic Scholar | Optional | Free; improves rate limits |
-| `PAPER_SEARCH_MCP_GOOGLE_SCHOLAR_PROXY_URL` | Google Scholar | Optional | Your HTTP/HTTPS proxy URL |
 | `PAPER_SEARCH_MCP_DOAJ_API_KEY` | DOAJ | Optional | Free at [doaj.org](https://doaj.org/apply-for-api-key/) |
 | `PAPER_SEARCH_MCP_ZENODO_ACCESS_TOKEN` | Zenodo | Optional | Free at [zenodo.org](https://zenodo.org/account/settings/applications/) |
 | `PAPER_SEARCH_MCP_IEEE_API_KEY` | IEEE Xplore | Required to activate | Free at [developer.ieee.org](https://developer.ieee.org/) |
@@ -190,6 +189,11 @@ needs **no** key — the KOBV Z39.50 endpoint is public.
 
 All variables follow the `PAPER_SEARCH_MCP_<NAME>` prefix scheme. Legacy names without
 the prefix are still supported for backward compatibility.
+
+> **OpenAlex:** since 2026-02-13 the OpenAlex API requires a key. Without one, a
+> deployment gets roughly ten searches per day and then receives HTTP 409, which
+> surfaces as empty result lists. The former "polite pool" (mailto parameter) no
+> longer applies.
 
 ---
 
@@ -200,13 +204,11 @@ project:
 
 | Source | Symptom | Cause | Workaround |
 |---|---|---|---|
-| Google Scholar | 0 results / empty HTML | Bot-detection (CAPTCHA) | Set `PAPER_SEARCH_MCP_GOOGLE_SCHOLAR_PROXY_URL` |
+| OpenAlex | Empty results after ~10 searches | Credit limit without API key (HTTP 409) | Set `PAPER_SEARCH_MCP_OPENALEX_API_KEY` |
 | Semantic Scholar | 429 responses | Anonymous rate limit | Set `PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY` |
 | CORE | 500 / timeout | Unauthenticated rate limiting | Set `PAPER_SEARCH_MCP_CORE_API_KEY` |
 | OpenAIRE | Transient 403 | IP-based session limiting | Connector retries with escalating profiles |
-| CiteSeerX | 404 / archive redirect | Endpoint intermittently redirects | Returns empty gracefully |
 | BASE | 0 results | OAI-PMH needs institutional IP | Register at [base-search.net](https://www.base-search.net/about/en/) |
-| SSRN | HTTP 403 | Bot-detection (Cloudflare) | Public PDF only; clear failure message |
 | PMC / Europe PMC | PDF ProxyError | Local proxy blocking HTTPS PDF | Not relevant to BHT search-only use |
 | Unpaywall | Skipped | email var not set | Set `PAPER_SEARCH_MCP_UNPAYWALL_EMAIL` |
 
