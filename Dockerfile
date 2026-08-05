@@ -2,10 +2,15 @@
 FROM python:3.12-slim AS builder
 
 WORKDIR /app
-COPY pyproject.toml README.md LICENSE ./
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml README.md LICENSE requirements.txt setup.sh ./
 COPY paper_search_mcp/ paper_search_mcp/
 
-RUN pip install --no-cache-dir build \
+RUN bash setup.sh \
+    && pip install --no-cache-dir build \
     && python -m build --wheel \
     && pip install --no-cache-dir dist/*.whl
 
@@ -15,15 +20,9 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin/paper-search-mcp /usr/local/bin/paper-search-mcp
 
-# Environment variables (override at runtime with -e)
-ENV PAPER_SEARCH_MCP_UNPAYWALL_EMAIL=""
-ENV PAPER_SEARCH_MCP_CORE_API_KEY=""
-ENV PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY=""
-ENV PAPER_SEARCH_MCP_ZENODO_ACCESS_TOKEN=""
-ENV PAPER_SEARCH_MCP_DOAJ_API_KEY=""
-ENV PAPER_SEARCH_MCP_GOOGLE_SCHOLAR_PROXY_URL=""
-ENV PAPER_SEARCH_MCP_IEEE_API_KEY=""
-ENV PAPER_SEARCH_MCP_ACM_API_KEY=""
+ENV PORT=8000
+
+EXPOSE 8000
 
 # Use the entry point script
 CMD ["paper-search-mcp"]
