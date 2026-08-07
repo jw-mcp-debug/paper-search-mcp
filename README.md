@@ -32,6 +32,7 @@ Release history and breaking changes are documented in [`CHANGELOG.md`](CHANGELO
 - [Credential & API Key Requirements](#credential--api-key-requirements)
 - [Known Upstream Limitations](#known-upstream-limitations)
 - [Deployment (Render, remote connector)](#deployment-render-remote-connector)
+- [Container Image (GHCR / Kubernetes)](#container-image-ghcr--kubernetes)
 - [Local Development (stdio)](#local-development-stdio)
 - [Version Bump & Release](#version-bump--release)
 - [Contributing](#contributing)
@@ -255,6 +256,28 @@ re-fetches the tool list.
 > Note: the free tier sleeps after ~15 minutes of inactivity; the first request then
 > takes ~1 minute to wake. For a production service, host on always-on infrastructure
 > (e.g. a university/RZ VM) with a fixed HTTPS endpoint.
+
+## Container Image (GHCR / Kubernetes)
+
+GitHub Actions publishes the Docker image to GitHub Container Registry:
+
+```text
+ghcr.io/jw-mcp-debug/paper-search-mcp
+```
+
+The `main` branch produces `main` and `sha-<commit>` tags. Release tags such as
+`v0.2.0` additionally produce immutable version tags such as `0.2.0` and `0.2`.
+The workflow also supports manual dispatch, which can be run against an existing
+release tag after workflow changes. Use the full version tag in cluster manifests:
+
+```yaml
+image: ghcr.io/jw-mcp-debug/paper-search-mcp:0.2.0
+```
+
+The container defaults to streamable HTTP on port `8000` and includes the OPAC
+runtime dependencies installed by `setup.sh`, including the PyZ3950 compatibility
+patch. Configure the same `PAPER_SEARCH_MCP_*` environment variables documented
+above in the Kubernetes `Deployment`.
 
 ## Local Development (stdio)
 
