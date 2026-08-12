@@ -22,6 +22,9 @@ from .academic_platforms.openaire import OpenAiresearcher
 from .academic_platforms.doaj import DOAJSearcher
 from .academic_platforms.unpaywall import UnpaywallResolver, UnpaywallSearcher
 from .academic_platforms.zenodo import ZenodoSearcher
+from .academic_platforms.medrxiv import MedRxivSearcher
+from .academic_platforms.base_search import BASESearcher
+from .academic_platforms.hal import HALSearcher
 from .utils import extract_doi
 
 from .paper import Paper
