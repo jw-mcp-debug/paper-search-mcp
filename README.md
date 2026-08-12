@@ -88,6 +88,8 @@ can retrieve it.
     `kobv_verbund_suche` — Z39.50 search of BHT holdings and the KOBV union catalog.
   - **Paper search**: high-level `search_papers` for multi-source, deduplicated
     search, plus per-source `search_*` connectors.
+    - **Citation chaining**: `paper_referenzen` (backward), `paper_zitiert_von`
+    (forward), `paper_verwandte` (sideways) — snowballing over OpenAlex metadata.
 - **BHT holdings filter**: catalog searches are filtered to the BHT stock via
   ISIL `DE-B768` (Bib-1 attribute 1044), with an option to widen to the full KOBV
   union catalog for interlibrary loan.
@@ -135,6 +137,36 @@ For topic searches a clean, targeted core (`crossref,openalex,doaj`) is recommen
 extended by discipline (`arxiv` for CS/maths/physics; `pubmed`/`europepmc` for
 medicine/life sciences) rather than querying all sources at once.
 
+## Citation Chaining (Snowballing)
+
+Beyond keyword search, the connector can follow the citation graph from a known
+paper. This is the snowballing method: from one relevant paper, move backward to
+the works it builds on and forward to the works that build on it. All three tools
+read structured OpenAlex metadata — no full text is fetched and no reference lists
+are parsed from PDFs.
+
+| Tool | Direction | Purpose |
+|---|---|---|
+| `paper_referenzen` | backward | Works the paper cites (`referenced_works`), hydrated with metadata and sorted by citation count. Leads to the foundational literature. |
+| `paper_zitiert_von` | forward | Works that cite the paper (`cites:` filter), sorted by citation count. `ab_jahr` restricts to recent work. Leads to the current state of research. |
+| `paper_verwandte` | sideways | OpenAlex `related_works`. **Unreliable — not recommended** (see note). |
+
+All three accept a DOI or an OpenAlex work ID (`W…`), including full URLs of either
+form. Abstracts are opt-in via `mit_abstract` (default off), since they enlarge the
+response; set it on for term harvesting (pearl growing).
+
+> **Reliability note.** `paper_verwandte` relies on OpenAlex `related_works`, which is
+> algorithmically derived and can return topically unrelated results when a record's
+> leading concept is an ambiguous token. Prefer `paper_referenzen` and
+> `paper_zitiert_von` for snowballing. Rule of thumb: the backward step from a
+> *review* surfaces methodology references, while the forward step surfaces the
+> substantive follow-on work — for subject literature, forward is usually richer.
+
+> **Credits.** Citation tools use the OpenAlex key (see
+> [Credential & API Key Requirements](#credential--api-key-requirements)).
+> `paper_referenzen` costs two requests per call, the others one to two. Without a
+> key, OpenAlex allows ~100 credits/day and then returns HTTP 409.
+
 ## Platform Capability Matrix
 
 Reflects verified live-integration results. Columns show the highest capability level
@@ -149,7 +181,7 @@ observed under normal conditions.
 | IACR | ✅ | ✅ | ✅ | Open API; reliable |
 | Semantic Scholar | ✅ | ✅ (OA) | ✅ (OA) | Works without key (rate-limited); key improves limits |
 | Crossref | ✅ | ❌ | ⚠️ info-only | Open API; reliable |
-| OpenAlex | ✅ | ❌ | ⚠️ info-only | Open API; reliable; provides citation counts |
+| OpenAlex | ✅ | ❌ | ⚠️ info-only | Open API; reliable; provides citation counts and backs the citation-chaining tools |
 | PMC | ✅ | ✅ (OA only) | ✅ (OA only) | OA PDFs only |
 | CORE | ✅ | ✅ (record-dependent) | ✅ (record-dependent) | Free key recommended |
 | Europe PMC | ✅ | ✅ (OA) | ✅ (OA) | OA PDFs only |
