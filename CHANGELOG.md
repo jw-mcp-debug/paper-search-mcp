@@ -16,6 +16,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.0] – 2026-08-12
+
+Adds citation chaining (snowballing) over OpenAlex as a third tool group. This is a
+purely additive release: no existing tool changed its name, parameters, or result
+format. Metadata-only — no full text is fetched and no reference lists are parsed
+from PDFs.
+
+### Added
+
+- **Citation chaining tools** (`paper_search_mcp/citations/`), registered through
+  `register_citation_tools(mcp)` from `server.py`, following the same pattern as the
+  OPAC tool group:
+  - `paper_referenzen` — **backward** search: the works a given paper cites, read
+    from the OpenAlex `referenced_works` field and hydrated with metadata. Leads to
+    the foundational literature of a topic.
+  - `paper_zitiert_von` — **forward** search: the works that cite a given paper,
+    via the OpenAlex `cites:` filter, sorted by citation count. Optional `ab_jahr`
+    restricts to recent work. Leads from a known key paper to the current state of
+    research — the direction a keyword search cannot provide.
+  - `paper_verwandte` — **sideways** search: OpenAlex `related_works`. See the
+    reliability caveat under *Known Limitations* below.
+- All three accept either a DOI or an OpenAlex work ID (`W…`), including full URLs of
+  either form; identifiers are normalized internally.
+- Results are returned in the same `Paper` dictionary format as the `search_*` tools,
+  so downstream formatting is unchanged.
+- Requests use the `select=` parameter to fetch only the needed fields, keeping
+  responses compact; abstracts are opt-in via `mit_abstract` (default off) because
+  they enlarge the payload substantially.
+- HTTP 409 (OpenAlex credit exhaustion) and 429 (rate limit) are translated into
+  explicit, actionable error messages rather than empty result lists.
+
+### Known Limitations
+
+- **`paper_verwandte` is unreliable** and is not recommended as a load-bearing step.
+  OpenAlex `related_works` is algorithmically derived and, for records whose leading
+  concept is an ambiguous token, can return topically unrelated results. Live testing
+  on a construction digital-twin review (whose first OpenAlex concept was the
+  ambiguous "Pace") returned works on authorship analysis and unrelated topics. The
+  backward and forward tools are unaffected and verified reliable. The tool is kept
+  because it is nearly free (one field from the already-fetched work object), but the
+  `agentische-recherche` skill should lean on `paper_referenzen` and
+  `paper_zitiert_von`.
+
+### Requirements
+
+- Citation tools use the existing OpenAlex key (`PAPER_SEARCH_MCP_OPENALEX_API_KEY`
+  or `OPENALEX_API_KEY`). Without a key, OpenAlex allows roughly 100 credits/day and
+  then returns HTTP 409; `paper_referenzen` costs two requests per call, the others
+  one to two.
+
+--- 
+
 ## [0.2.0] – 2026-07-24
 
 Cleanup release in preparation for institutional deployment. **Breaking**: several
