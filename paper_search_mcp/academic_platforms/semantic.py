@@ -3,6 +3,7 @@ from datetime import datetime
 import os
 import requests
 from bs4 import BeautifulSoup
+import threading
 import time
 import random
 from ..paper import Paper
@@ -19,8 +20,23 @@ logger = logging.getLogger(__name__)
 class SemanticSearcher(PaperSource):
     """Semantic Scholar paper search implementation"""
 
-    SEMANTIC_SEARCH_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
     SEMANTIC_BASE_URL = "https://api.semanticscholar.org/graph/v1"
+    # The relevance search endpoint rejects limit > 100 with HTTP 400, which
+    # surfaces as an empty result list rather than an obvious failure.
+    MAX_SEARCH_LIMIT = 100
+    # Upper bound for a single 429 backoff sleep, in seconds. Without a cap a
+    # rate-limited source can stall a multi-source search past the MCP client
+    # timeout, especially on a cold-started free-tier instance.
+    MAX_RETRY_WAIT = 10
+    # Minimum interval in seconds between two consecutive requests to the
+    # Semantic Scholar API. The authenticated rate limit is 1 request per
+    # second per key, shared by every concurrent user of this server, so
+    # requests are serialised class-wide rather than per instance. The margin
+    # above 1.0 absorbs clock granularity and network jitter.
+    MIN_REQUEST_INTERVAL = 1.05
+    _request_lock = threading.Lock()
+    _last_request_at = 0.0
+
     BROWSERS = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
@@ -158,6 +174,26 @@ class SemanticSearcher(PaperSource):
             return None
         return api_key.strip()
 
+    @classmethod
+    def _throttle(cls) -> None:
+        """Serialise outgoing requests to stay within 1 request per second.
+
+        The lock is held for the duration of the wait so that concurrent
+        callers queue up one behind the other. Releasing the lock before
+        sleeping would let every waiting caller wake for the same slot and
+        fire simultaneously, which is exactly what this guards against.
+        """
+        with cls._request_lock:
+            wait = cls.MIN_REQUEST_INTERVAL - (
+                time.monotonic() - cls._last_request_at
+            )
+            if wait > 0:
+                logger.debug(
+                    "Throttling Semantic Scholar request by %.2f s", wait
+                )
+                time.sleep(wait)
+            cls._last_request_at = time.monotonic()
+
     def request_api(self, path: str, params: dict) -> dict:
         """
         Make a request to the Semantic Scholar API with optional API key.
@@ -171,6 +207,7 @@ class SemanticSearcher(PaperSource):
             try:
                 headers = {"x-api-key": api_key} if api_key else {}
                 url = f"{self.SEMANTIC_BASE_URL}/{path}"
+                self._throttle()
                 response = self.session.get(
                     url, params=params, headers=headers, timeout=30
                 )
@@ -187,7 +224,7 @@ class SemanticSearcher(PaperSource):
                     has_retried_without_key = True
                     continue
 
-                # 检查是否是429错误（限流）
+                # Handle HTTP 429 (rate limited)
                 if response.status_code == 429:
                     if attempt < max_retries - 1:
                         retry_after = response.headers.get("Retry-After")
@@ -196,6 +233,7 @@ class SemanticSearcher(PaperSource):
                             if retry_after and retry_after.isdigit()
                             else retry_delay * (2**attempt)
                         )
+                        wait_time = min(wait_time, self.MAX_RETRY_WAIT)
                         logger.warning(
                             f"Rate limited (429). Waiting {wait_time} seconds before retry {attempt + 1}/{max_retries}"
                         )
@@ -234,6 +272,7 @@ class SemanticSearcher(PaperSource):
                             if retry_after and retry_after.isdigit()
                             else retry_delay * (2**attempt)
                         )
+                        wait_time = min(wait_time, self.MAX_RETRY_WAIT)
                         logger.warning(
                             f"Rate limited (429). Waiting {wait_time} seconds before retry {attempt + 1}/{max_retries}"
                         )
@@ -304,10 +343,18 @@ class SemanticSearcher(PaperSource):
                 "fieldsOfStudy",
                 "openAccessPdf",
             ]
-            # Construct search parameters
+            # Construct search parameters. The relevance search endpoint rejects
+            # limit > 100, so clamp it here and slice the response afterwards.
+            api_limit = max(1, min(int(max_results), self.MAX_SEARCH_LIMIT))
+            if api_limit < max_results:
+                logger.info(
+                    "Requested %s results, capping Semantic Scholar limit at %s",
+                    max_results,
+                    api_limit,
+                )
             params = {
                 "query": query,
-                "limit": max_results,
+                "limit": api_limit,
                 "fields": ",".join(fields),
             }
             if year:
@@ -333,11 +380,30 @@ class SemanticSearcher(PaperSource):
                 return papers
 
             data = response.json()
-            results = data["data"]
+            if not isinstance(data, dict):
+                logger.error(
+                    "Unexpected Semantic Scholar payload type: %s",
+                    type(data).__name__,
+                )
+                return papers
+
+            results = data.get("data") or []
 
             if not results:
-                logger.info("No results found for the query")
+                logger.info(
+                    "No results for query %r (total=%s, raw response: %s)",
+                    query,
+                    data.get("total"),
+                    str(data)[:500],
+                )
                 return papers
+
+            logger.info(
+                "Semantic Scholar returned %s items (total=%s) for query %r",
+                len(results),
+                data.get("total"),
+                query,
+            )
 
             # Process each result
             for i, item in enumerate(results):
