@@ -15,6 +15,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > names, parameters, and result formats may still change between minor versions.
 
 ---
+## [0.3.2] – 2026-08-19
+
+Reliability fixes for the Semantic Scholar connector. No tool names, parameters,
+or result formats changed; clients do not need to reconnect.
+
+### Added
+
+- **Semantic Scholar: client-side request serialisation.** Consecutive requests
+  are spaced by at least `MIN_REQUEST_INTERVAL` (1.05 s) using a class-wide
+  lock, so concurrent users cannot collectively exceed the 1 request/second
+  limit that applies to an authenticated key. Note that the lock is
+  process-local: deployments running multiple worker processes must adjust the
+  interval accordingly.
+  
+### Fixed
+
+- **Semantic Scholar: `limit` is now clamped to the API maximum of 100.**
+  The relevance search endpoint rejects larger values with HTTP 400. Requests
+  with `max_results > 100` therefore returned no results at all, which surfaced
+  as an apparently empty source rather than an error.
+- **Semantic Scholar: missing `data` key no longer raises.** The response is
+  now read via `.get()`. Previously a KeyError was swallowed by the generic
+  exception handler, masking the underlying cause.
+- **Semantic Scholar: a single HTTP 429 backoff is capped at 10 seconds.**
+  Exponential backoff is retained, but an uncapped wait could stall a
+  multi-source search past the MCP client timeout on a cold-started instance.
+
+### Changed
+
+- Semantic Scholar: log the reported `total` and a truncated raw payload when a
+  query returns no results, so genuine zero-hit queries can be distinguished
+  from capped or malformed requests.
+- Translated the remaining upstream Chinese comments in `semantic.py` to English.
+
+### Removed
+
+- Semantic Scholar: unused `SEMANTIC_SEARCH_URL` constant. The request URL is
+  built from `SEMANTIC_BASE_URL` and the endpoint path.
+
 
 ## [0.3.0] – 2026-08-12
 
