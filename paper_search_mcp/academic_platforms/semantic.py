@@ -3,6 +3,7 @@ from datetime import datetime
 import os
 import requests
 from bs4 import BeautifulSoup
+import threading
 import time
 import random
 from ..paper import Paper
@@ -27,6 +28,15 @@ class SemanticSearcher(PaperSource):
     # rate-limited source can stall a multi-source search past the MCP client
     # timeout, especially on a cold-started free-tier instance.
     MAX_RETRY_WAIT = 10
+    # Minimum interval in seconds between two consecutive requests to the
+    # Semantic Scholar API. The authenticated rate limit is 1 request per
+    # second per key, shared by every concurrent user of this server, so
+    # requests are serialised class-wide rather than per instance. The margin
+    # above 1.0 absorbs clock granularity and network jitter.
+    MIN_REQUEST_INTERVAL = 1.05
+    _request_lock = threading.Lock()
+    _last_request_at = 0.0
+
     BROWSERS = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
@@ -164,6 +174,26 @@ class SemanticSearcher(PaperSource):
             return None
         return api_key.strip()
 
+    @classmethod
+    def _throttle(cls) -> None:
+        """Serialise outgoing requests to stay within 1 request per second.
+
+        The lock is held for the duration of the wait so that concurrent
+        callers queue up one behind the other. Releasing the lock before
+        sleeping would let every waiting caller wake for the same slot and
+        fire simultaneously, which is exactly what this guards against.
+        """
+        with cls._request_lock:
+            wait = cls.MIN_REQUEST_INTERVAL - (
+                time.monotonic() - cls._last_request_at
+            )
+            if wait > 0:
+                logger.debug(
+                    "Throttling Semantic Scholar request by %.2f s", wait
+                )
+                time.sleep(wait)
+            cls._last_request_at = time.monotonic()
+
     def request_api(self, path: str, params: dict) -> dict:
         """
         Make a request to the Semantic Scholar API with optional API key.
@@ -177,6 +207,7 @@ class SemanticSearcher(PaperSource):
             try:
                 headers = {"x-api-key": api_key} if api_key else {}
                 url = f"{self.SEMANTIC_BASE_URL}/{path}"
+                self._throttle()
                 response = self.session.get(
                     url, params=params, headers=headers, timeout=30
                 )
