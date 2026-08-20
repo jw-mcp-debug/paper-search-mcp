@@ -45,6 +45,23 @@ class TestSemanticSearcher(unittest.TestCase):
             self.assertTrue(expected_path.exists())
             self.assertEqual(expected_path.read_bytes(), b"%PDF-1.4 test content")
 
+    def test_search_clamps_limit_to_api_maximum(self):
+        """max_results above the API cap must be clamped in the outgoing request.
+
+        The relevance search endpoint rejects limit > 100 with HTTP 400, which
+        otherwise surfaces as an empty result list rather than an obvious
+        failure. This is purely client-side, so it's mocked rather than run
+        against the live API.
+        """
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = {"data": [], "total": 0}
+
+        with patch.object(self.searcher.session, "get", return_value=response) as mock_get:
+            self.searcher.search("cryptography", max_results=150)
+
+        self.assertEqual(mock_get.call_args.kwargs["params"]["limit"], 100)
+
     def test_parse_paper_handles_missing_publication_date(self):
         item = {
             "paperId": "paper-123",
