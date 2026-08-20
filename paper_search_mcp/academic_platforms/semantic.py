@@ -234,6 +234,11 @@ class SemanticSearcher(PaperSource):
                     )
                     api_key = None
                     has_retried_without_key = True
+                    # The configured key was rejected, so the authenticated
+                    # retry budget no longer applies: everything from here on
+                    # goes against the shared anonymous pool, where retrying a
+                    # 429 only prolongs the block. Allow one more attempt.
+                    max_retries = attempt + 2
                     continue
 
                 # Handle HTTP 429 (rate limited)
@@ -275,6 +280,7 @@ class SemanticSearcher(PaperSource):
                     )
                     api_key = None
                     has_retried_without_key = True
+                    max_retries = attempt + 2
                     continue
                 if e.response.status_code == 429:
                     if attempt < max_retries - 1:
