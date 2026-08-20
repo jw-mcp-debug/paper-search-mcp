@@ -15,6 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > names, parameters, and result formats may still change between minor versions.
 
 ---
+## [0.3.3] – 2026-08-20
+
+### Fixed
+
+- **Semantic Scholar: API failures are no longer reported as zero results.**
+  `search()` now raises `SemanticScholarUnavailable` when the API is rate
+  limited or returns a non-200 status, so `search_papers` records the failure
+  in its `errors` mapping. Previously an unreachable source and a query with
+  no matches were indistinguishable from the outside.
+
 ## [0.3.2] – 2026-08-19
 
 Reliability fixes for the Semantic Scholar connector. No tool names, parameters,

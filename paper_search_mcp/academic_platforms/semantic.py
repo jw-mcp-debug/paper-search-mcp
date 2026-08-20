@@ -17,6 +17,16 @@ from ..config import get_env
 logger = logging.getLogger(__name__)
 
 
+class SemanticScholarUnavailable(RuntimeError):
+    """Raised when the Semantic Scholar API could not be queried at all.
+
+    Distinguishes an unreachable or rate-limited source from a query that
+    legitimately returned no results. `search_papers` reports raised
+    exceptions in its `errors` mapping, so this reaches the client instead
+    of being flattened into a zero-hit result.
+    """
+
+
 class SemanticSearcher(PaperSource):
     """Semantic Scholar paper search implementation"""
 
@@ -198,8 +208,10 @@ class SemanticSearcher(PaperSource):
         """
         Make a request to the Semantic Scholar API with optional API key.
         """
-        max_retries = 3
         api_key = self.get_api_key()
+        # Without a key, retries only extend an already-throttled IP's
+        # cooldown, so give up after the first 429 instead of retrying.
+        max_retries = 3 if api_key else 1
         retry_delay = 5 if api_key is None else 2
         has_retried_without_key = False
 
@@ -365,11 +377,16 @@ class SemanticSearcher(PaperSource):
             # Check for errors
             if isinstance(response, dict) and "error" in response:
                 error_msg = response.get("message", "Unknown error")
-                if response.get("error") == "rate_limited":
+                error_kind = response.get("error")
+                if error_kind == "rate_limited":
                     logger.error(f"Rate limited by Semantic Scholar API: {error_msg}")
                 else:
                     logger.error(f"Semantic Scholar API error: {error_msg}")
-                return papers
+                # Raise rather than return an empty list: an unreachable source
+                # must not look identical to a query with no matches.
+                raise SemanticScholarUnavailable(
+                    f"Semantic Scholar unavailable ({error_kind}): {error_msg}"
+                )
 
             # Check response status code
             if not hasattr(response, "status_code") or response.status_code != 200:
@@ -377,7 +394,9 @@ class SemanticSearcher(PaperSource):
                 logger.error(
                     f"Semantic Scholar search failed with status {status_code}"
                 )
-                return papers
+                raise SemanticScholarUnavailable(
+                    f"Semantic Scholar returned HTTP {status_code}"
+                )
 
             data = response.json()
             if not isinstance(data, dict):
@@ -417,6 +436,10 @@ class SemanticSearcher(PaperSource):
                 if paper:
                     papers.append(paper)
 
+        except SemanticScholarUnavailable:
+            # Propagate: search_papers records this in its `errors` mapping,
+            # and the standalone tool surfaces it as a tool error.
+            raise
         except Exception as e:
             logger.error(f"Semantic Scholar search error: {e}")
 
