@@ -15,6 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > names, parameters, and result formats may still change between minor versions.
 
 ---
+## [0.3.4] – 2026-08-20
+
+### Fixed
+
+- **Semantic Scholar: retry budget no longer carries over into the anonymous
+  fallback after a 403.** When a configured API key was rejected, the
+  authenticated retry budget (3 attempts) stayed in effect for the anonymous
+  fallback, letting it retry 429s against the already-throttled shared pool.
+  `max_retries` is now capped right after the fallback so only one anonymous
+  attempt is made before giving up.
+
 ## [0.3.3] – 2026-08-20
 
 ### Fixed
