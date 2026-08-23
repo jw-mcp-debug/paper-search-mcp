@@ -247,6 +247,23 @@ def _merge_paper(kept: Dict[str, Any], duplicate: Dict[str, Any]) -> None:
                 current.setdefault(extra_key, extra_value)
 
 
+def _truncate_abstract(abstract: str, limit: int) -> str:
+    """Shorten an abstract to `limit` characters, cutting on a word boundary.
+
+    Abstracts are the largest field of a result and dominate what a session
+    accumulates. Screening works on the first few sentences; harvesting search
+    terms does not, which is why the caller can switch truncation off.
+    """
+    if limit <= 0 or len(abstract) <= limit:
+        return abstract
+
+    cut = abstract[:limit]
+    boundary = cut.rfind(" ")
+    if boundary > limit // 2:
+        cut = cut[:boundary]
+    return cut.rstrip(" ,;:.-") + " […]"
+
+
 def _dedupe_papers(papers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     deduped: List[Dict[str, Any]] = []
     seen: Dict[str, Dict[str, Any]] = {}
@@ -346,6 +363,8 @@ async def search_papers(
     max_results_per_source: int = 5,
     sources: str = "all",
     year: Optional[str] = None,
+    abstract_chars: int = 600,
+    crossref_filter: str = "",
 ) -> Dict[str, Any]:
     """Unified top-level search across all configured academic platforms.
 
@@ -356,6 +375,10 @@ async def search_papers(
             Available: arxiv,pubmed,biorxiv,medrxiv,iacr,semantic,crossref,openalex,pmc,core,europepmc,dblp,openaire,doaj,base,zenodo,hal,unpaywall
             (ieee and acm are added automatically when their API keys are configured)
         year: Optional year filter for Semantic Scholar only.
+        abstract_chars: Truncate abstracts to this many characters; 0 keeps them
+            in full, which is what harvesting search terms from abstracts needs.
+        crossref_filter: CrossRef filter applied inside the aggregation, e.g.
+            'type:journal-article' or 'from-pub-date:2020-01-01'.
     Returns:
         Aggregated dictionary with per-source stats, errors, and deduplicated papers.
     """
@@ -387,7 +410,9 @@ async def search_papers(
         elif source == "semantic":
             task_map[source] = search_semantic(query, year=year, max_results=max_results_per_source)
         elif source == "crossref":
-            task_map[source] = search_crossref(query, max_results=max_results_per_source)
+            task_map[source] = search_crossref(
+                query, max_results=max_results_per_source, filter=crossref_filter or None
+            )
         elif source == "openalex":
             task_map[source] = search_openalex(query, max_results_per_source)
         elif source == "pmc":
@@ -440,6 +465,11 @@ async def search_papers(
             merged_papers.append(paper)
 
     deduped_papers = _dedupe_papers(merged_papers)
+    if abstract_chars > 0:
+        for paper in deduped_papers:
+            abstract = paper.get("abstract")
+            if abstract:
+                paper["abstract"] = _truncate_abstract(abstract, abstract_chars)
 
     # sources_used restates the keys of source_results, and sources_requested
     # and raw_total were debugging aids — all three are paid for per call.

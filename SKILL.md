@@ -154,6 +154,17 @@ Fachabdeckung. Dazu drei Dinge, die man beim Auswerten wissen muss:
 - **dblp findet gut, aber screent schlecht:** keine Abstracts, keine
   Zitationszahlen. Für die Auswahl in dieser Stufe fehlen damit beide Signale.
 
+Zwei Parameter, die sich in dieser Stufe lohnen:
+
+- `crossref_filter="type:journal-article"` filtert Dissertationen, Proceedings
+  und Verlagsartefakte aus dem Crossref-Anteil. In einem Testlauf zu
+  „cross-laminated timber fire resistance" waren ohne Filter alle Crossref-Treffer
+  Dissertationen und Konferenzbeiträge ohne Abstract; mit Filter stieg die Zahl
+  der Treffer mit Abstract von 5 auf 7 von 10.
+- `abstract_chars` kürzt die Abstracts (Standard 600 Zeichen). Fürs Screening
+  reichen die ersten Sätze. **Für die Begriffsernte `abstract_chars=0` setzen** –
+  wer Suchbegriffe aus Abstracts gewinnen will, braucht sie vollständig.
+
 **Auswahl der besten Titel – das ist Claudes Aufgabe, nicht die des Tools:**
 `search_papers` aggregiert pro Quelle und dedupliziert, **rankt aber nicht
 quellenübergreifend nach Relevanz**. Deshalb aktiv auswählen anhand der
@@ -195,6 +206,9 @@ Jeweils 2–3 Vorschläge pro Richtung, mit dem konkreten Suchbegriff bzw. Toola
 **Vertiefen** (gezielter, spezifischer), wenn die Ausbeute gut war:
 - **Schlagwörter aus den besten Treffern** aufgreifen: Die GND-Schlagwörter der
   OPAC-Ergebnisse sind erprobte Sucheinstiege — nenne sie als nächste Suchbegriffe.
+  Sollen die Begriffe aus den **Abstracts** der besten Paper kommen, die Suche mit
+  `abstract_chars=0` wiederholen — gekürzte Abstracts verschweigen genau die
+  Fachbegriffe am Ende.
 - **Autorensuche** (`opac_autor_suche`) zu Personen, die mehrfach auftauchten
 - Unterbegriff/Teilaspekt, der in den Treffern sichtbar wurde
 - Zeitliche Eingrenzung auf die letzten Jahre für den aktuellen Stand
@@ -243,7 +257,7 @@ Katalog:
 - `kobv_verbund_suche(suchbegriff, suchtyp="any", max_treffer)`
 
 Paper:
-- `search_papers(query, sources="openalex,semantic,crossref", max_results_per_source=5, year=optional)`
+- `search_papers(query, sources="openalex,semantic,crossref", max_results_per_source=5, year=optional, abstract_chars=600, crossref_filter="")`
 - Quellenspezifische `search_*` (z. B. `search_openalex`) für gezielte Einzelabfragen.
 
 Zitationsverfolgung (Schneeballsystem):

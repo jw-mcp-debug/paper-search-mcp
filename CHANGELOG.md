@@ -17,6 +17,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 ## [Unreleased]
 
+### Added
+
+- **`search_papers(abstract_chars=600)` shortens abstracts.** Abstracts are by
+  far the largest field of a result — 1,599 of 2,781 tokens in a reference query
+  — and screening works on the first few sentences. Truncation cuts on a word
+  boundary and marks the cut with ` […]`. **`abstract_chars=0` keeps them whole**,
+  which is what harvesting search terms from abstracts needs; `SKILL.md` says so
+  at the step where that happens. Measured on identical results: 2,781 → 2,061
+  tokens.
+- **`search_papers(crossref_filter=…)` passes a CrossRef filter into the
+  aggregation**, so it applies with deduplication and error handling rather than
+  requiring a separate `search_crossref` call. `type:journal-article` filters out
+  the dissertations and proceedings that dominated the CrossRef share of a
+  reference query; results carrying an abstract rose from 5 to 7 of 10.
+
 ### Changed
 
 - **Search results carry only what helps judge a paper.** `Paper.to_dict()`
