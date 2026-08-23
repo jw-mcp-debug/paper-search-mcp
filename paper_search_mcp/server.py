@@ -75,6 +75,22 @@ async def async_search(searcher, query: str, max_results: int, **kwargs) -> List
     return [paper.to_dict() for paper in papers]
 
 
+
+# Upper bound per source in search_papers. Without it a single stalled
+# provider keeps the whole aggregated search pending until the MCP client
+# gives up, which loses the results of every other source.
+SOURCE_TIMEOUT_SECONDS = 45
+
+
+async def _run_search_with_timeout(source_name: str, search_task):
+    try:
+        return await asyncio.wait_for(search_task, timeout=SOURCE_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError as exc:
+        raise TimeoutError(
+            f"search for source '{source_name}' timed out after {SOURCE_TIMEOUT_SECONDS} seconds"
+        ) from exc
+
+
 ALL_SOURCES = [
     "arxiv",
     "pubmed",
@@ -313,7 +329,10 @@ async def search_papers(
                 task_map[source] = async_search(acm_searcher, query, max_results_per_source)
 
     source_names = list(task_map.keys())
-    source_outputs = await asyncio.gather(*task_map.values(), return_exceptions=True)
+    source_outputs = await asyncio.gather(
+        *(_run_search_with_timeout(name, task) for name, task in task_map.items()),
+        return_exceptions=True,
+    )
 
     source_results: Dict[str, int] = {}
     errors: Dict[str, str] = {}
