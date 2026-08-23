@@ -17,6 +17,18 @@ class CrossRefSearcher(PaperSource):
     
     # User agent for polite API usage as per CrossRef etiquette
     USER_AGENT = "paper-search-mcp/0.1.3 (https://github.com/Dragonatorul/paper-search-mcp; mailto:paper-search@example.org)"
+
+    # CrossRef registers sub-components of a publication under their own DOI.
+    # They surface in search results as items with a DOI but no citable
+    # content of their own ("Review for ...", "Figure 5: ...").
+    # Report, standard and dataset types are deliberately kept: they are
+    # standalone documents and relevant for engineering literature searches.
+    NON_PAPER_TYPES = frozenset({
+        "peer-review",
+        "peer-review-material",
+        "component",
+        "figure",
+    })
     
     def __init__(self):
         self.session = requests.Session()
@@ -90,8 +102,20 @@ class CrossRefSearcher(PaperSource):
             return []
     
     def _parse_crossref_item(self, item: Dict[str, Any]) -> Optional[Paper]:
-        """Parse a CrossRef API item into a Paper object."""
+        """Parse a CrossRef API item into a Paper object.
+
+        Returns None for sub-component types that are not papers in their own
+        right, so they never reach the result list.
+        """
         try:
+            item_type = item.get('type', '')
+            if item_type in self.NON_PAPER_TYPES:
+                logger.debug(
+                    "Skipping non-paper CrossRef item (type=%s, DOI=%s)",
+                    item_type, item.get('DOI', 'unknown'),
+                )
+                return None
+
             # Extract basic information
             doi = item.get('DOI', '')
             title = self._extract_title(item)

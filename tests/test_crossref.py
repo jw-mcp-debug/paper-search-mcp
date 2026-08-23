@@ -103,3 +103,39 @@ class TestCrossRefSearcher(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class TestCrossRefNonPaperTypes(unittest.TestCase):
+    """CrossRef returns peer-review material and figures under their own DOI.
+    They have no citable content and must not appear as search results."""
+
+    def setUp(self):
+        self.searcher = CrossRefSearcher()
+
+    def test_peer_review_item_is_skipped(self):
+        item = {
+            'DOI': '10.1002/jmor.21431/v1/review1',
+            'type': 'peer-review',
+            'title': ['Review for "Anatomy of the myodural bridge"'],
+        }
+        self.assertIsNone(self.searcher._parse_crossref_item(item))
+
+    def test_figure_component_is_skipped(self):
+        item = {'DOI': '10.6084/m9.figshare.123.v1', 'type': 'figure', 'title': ['Figure 5']}
+        self.assertIsNone(self.searcher._parse_crossref_item(item))
+
+    def test_journal_article_is_kept(self):
+        item = {
+            'DOI': '10.1000/real',
+            'type': 'journal-article',
+            'title': ['A real paper'],
+            'author': [{'given': 'Ada', 'family': 'Lovelace'}],
+        }
+        paper = self.searcher._parse_crossref_item(item)
+        self.assertIsNotNone(paper)
+        self.assertEqual(paper.doi, '10.1000/real')
+
+    def test_report_and_standard_are_kept(self):
+        for kept in ('report', 'standard', 'dataset'):
+            with self.subTest(type=kept):
+                item = {'DOI': f'10.1000/{kept}', 'type': kept, 'title': [f'A {kept}']}
+                self.assertIsNotNone(self.searcher._parse_crossref_item(item))
