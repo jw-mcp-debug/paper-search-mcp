@@ -191,29 +191,73 @@ def _parse_sources(sources: str) -> List[str]:
     return [source for source in normalized if source in ALL_SOURCES]
 
 
+_TITLE_NOISE = re.compile(r"[^a-z0-9 ]+")
+
+
+def _normalize_title(title: str) -> str:
+    """Normalize a title so the same paper matches across sources.
+
+    Sources disagree on casing and on singular versus plural — "Stepwise
+    Migration of a Monolith to a Microservices Architecture" from CrossRef and
+    "Stepwise migration of a monolith to a microservice architecture" from dblp
+    are the same paper, and without normalization both reach the client.
+    """
+    words = _TITLE_NOISE.sub(" ", (title or "").lower()).split()
+    return " ".join(word[:-1] if len(word) > 4 and word.endswith("s") else word for word in words)
+
+
 def _paper_unique_key(paper: Dict[str, Any]) -> str:
     doi = (paper.get("doi") or "").strip().lower()
     if doi:
         return f"doi:{doi}"
 
-    title = (paper.get("title") or "").strip().lower()
-    authors = (paper.get("authors") or "").strip().lower()
+    title = _normalize_title(paper.get("title") or "")
     if title:
-        return f"title:{title}|authors:{authors}"
+        # The year guards against two different works sharing a generic title.
+        year = (str(paper.get("published_date") or ""))[:4]
+        return f"title:{title}|year:{year}"
 
     paper_id = (paper.get("paper_id") or "").strip().lower()
     return f"id:{paper_id}"
 
 
+_EMPTY_VALUES = ("", [], {}, None, 0)
+
+
+def _merge_paper(kept: Dict[str, Any], duplicate: Dict[str, Any]) -> None:
+    """Fill gaps in the kept record from its duplicate.
+
+    Whoever answered first used to win outright, so a CrossRef record without
+    an abstract could displace the OpenAlex record that had one. Merging costs
+    nothing and keeps the richer data.
+    """
+    for key, value in duplicate.items():
+        if value in _EMPTY_VALUES:
+            continue
+
+        current = kept.get(key)
+        if current in _EMPTY_VALUES:
+            kept[key] = value
+        elif key == "citations":
+            kept[key] = max(current, value)
+        elif key == "abstract" and len(str(value)) > len(str(current)):
+            kept[key] = value
+        elif key == "extra" and isinstance(current, dict) and isinstance(value, dict):
+            for extra_key, extra_value in value.items():
+                current.setdefault(extra_key, extra_value)
+
+
 def _dedupe_papers(papers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     deduped: List[Dict[str, Any]] = []
-    seen: set[str] = set()
+    seen: Dict[str, Dict[str, Any]] = {}
 
     for paper in papers:
         key = _paper_unique_key(paper)
-        if key in seen:
+        kept = seen.get(key)
+        if kept is not None:
+            _merge_paper(kept, paper)
             continue
-        seen.add(key)
+        seen[key] = paper
         deduped.append(paper)
 
     return deduped
@@ -397,15 +441,14 @@ async def search_papers(
 
     deduped_papers = _dedupe_papers(merged_papers)
 
+    # sources_used restates the keys of source_results, and sources_requested
+    # and raw_total were debugging aids — all three are paid for per call.
     return {
         "query": query,
-        "sources_requested": sources,
-        "sources_used": source_names,
         "source_results": source_results,
         "errors": errors,
         "papers": deduped_papers,
         "total": len(deduped_papers),
-        "raw_total": len(merged_papers),
     }
 
 

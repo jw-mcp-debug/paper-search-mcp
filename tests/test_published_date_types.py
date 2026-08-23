@@ -21,7 +21,7 @@ class TestHALDates(unittest.TestCase):
             "publicationDateY_i": 2025,
         })
         self.assertEqual(paper.published_date, datetime(2025, 1, 1))
-        self.assertEqual(paper.to_dict()["published_date"], "2025-01-01T00:00:00")
+        self.assertEqual(paper.to_dict()["published_date"], "2025")
 
     def test_full_submitted_date(self):
         paper = self.searcher._parse_doc({
@@ -34,7 +34,7 @@ class TestHALDates(unittest.TestCase):
     def test_missing_date(self):
         paper = self.searcher._parse_doc({"halId_s": "hal-125", "title_s": ["No date"]})
         self.assertIsNone(paper.published_date)
-        self.assertEqual(paper.to_dict()["published_date"], "")
+        self.assertNotIn("published_date", paper.to_dict())
 
 
 class TestZenodoDates(unittest.TestCase):
@@ -54,7 +54,7 @@ class TestZenodoDates(unittest.TestCase):
     def test_full_date(self):
         paper = self.searcher._parse_record(self._record("2025-11-17"))
         self.assertEqual(paper.published_date, datetime(2025, 11, 17))
-        self.assertEqual(paper.to_dict()["published_date"], "2025-11-17T00:00:00")
+        self.assertEqual(paper.to_dict()["published_date"], "2025")
 
     def test_partial_dates(self):
         self.assertEqual(

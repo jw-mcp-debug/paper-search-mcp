@@ -19,6 +19,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Search results carry only what helps judge a paper.** `Paper.to_dict()`
+  serialized all 15 fields including the empty ones; `updated_date`, `keywords`
+  and `references` were empty in every result of a reference query. Empty fields
+  are now omitted, `published_date` is the year, a `url` that only restates the
+  DOI and a `paper_id` identical to the DOI are dropped, `extra` is a real dict
+  limited to the fields that help judgement instead of a stringified one,
+  `categories` is capped at three, and author lists are capped at three names
+  plus `u. a. (n=47)` — hyperauthorship papers could otherwise cost more than a
+  thousand tokens for a single result. Measured on an identical query with
+  identical results: 3,459 → 2,781 tokens, 346 → 278 per paper.
+- **`search_papers` no longer returns `sources_used`, `sources_requested` and
+  `raw_total`.** The first restates the keys of `source_results`, the other two
+  were debugging aids, and all three are paid for on every call.
+
 - **Tool schemas are trimmed of everything that carries no information.** The
   tool list is part of every request, so its cost is paid in every turn of every
   chat. Three sources of ballast are gone: the generated `outputSchema` (an
@@ -53,6 +67,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   within a few requests.
 
 ### Fixed
+
+- **CrossRef: a missing date is no longer filled with 1970-01-01.** The
+  placeholder corrupted every year filter and sort — and it did more damage than
+  that: `_extract_date` substituted 1970 whenever the year part was missing, and
+  since that value is truthy, the fallback chain `published` → `issued` →
+  `created` stopped at the first field and never reached the one that had the
+  real date. Three of five results for a reference query carried 1970-01-01;
+  after the fix all three carry their actual publication year.
+- **CrossRef: abstracts are stripped of JATS markup.** They arrived with
+  `<jats:p>`, `<jats:title>`, `<jats:italic>` and friends, which cost tokens and
+  get in the way while screening. A leading "Abstract" heading goes with it.
+- **Deduplication merges instead of discarding, and matches across sources.**
+  The unique key ignored casing and singular/plural, so "… to a Microservices
+  Architecture" (CrossRef) and "… to a microservice architecture" (dblp) both
+  reached the client; it also mixed the author string into the key, where
+  sources disagree on formatting. Titles are now normalized and paired with the
+  year. When a duplicate is found, empty fields are filled from it, the higher
+  citation count and the longer abstract win, and `extra` is merged key by key —
+  previously whichever source answered first won outright, so a record without
+  an abstract could displace one that had it.
 
 - **dblp: outages are no longer reported as zero results.** dblp throttles per
   client IP with HTTP 429 and a `Retry-After` header, then with 503, and finally
