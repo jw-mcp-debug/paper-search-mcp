@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   all 56), the `title` keyword pydantic derives from every field name
   (`max_treffer` → `"title": "Max Treffer"`, 191 occurrences), and the docstring
   indentation FastMCP copied verbatim into every description. Full tool list:
-  14,629 → 9,582 tokens; the seven tools of the BHT research skill: 2,926 →
+  14,629 → 9,564 tokens; the seven tools of the BHT research skill: 2,926 →
   2,032.
 - **The three OPAC tools take flat arguments** (`opac_suche(suchbegriff=…,
   suchtyp=…)`) instead of a wrapped `params` object, matching
