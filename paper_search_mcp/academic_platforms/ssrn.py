@@ -21,6 +21,7 @@ import logging
 import re
 import time
 import os
+from datetime import datetime
 from typing import List, Optional, Any, Tuple
 from urllib.parse import urljoin
 
@@ -31,6 +32,25 @@ from .base import PaperSource
 from ..paper import Paper
 
 logger = logging.getLogger(__name__)
+
+
+
+def _parse_date(value: str) -> Optional[datetime]:
+    """Parse an SSRN result date (e.g. "15 Mar 2023", "2023-03-15", "2023")."""
+    value = (value or "").strip()
+    if not value:
+        return None
+    # SSRN prefixes dates with labels such as "Posted: " or "Last revised: "
+    value = re.sub(r"^[A-Za-z ]+:\s*", "", value).strip()
+    for fmt in ("%Y-%m-%d", "%d %b %Y", "%d %B %Y", "%b %d, %Y", "%B %d, %Y", "%Y"):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    year = re.search(r"(19|20)\d{2}", value)
+    if year:
+        return datetime(int(year.group(0)), 1, 1)
+    return None
 
 
 class SSRNSearcher(PaperSource):
@@ -335,7 +355,8 @@ class SSRNSearcher(PaperSource):
                 or block.select_one("span.author-name")
                 or block.select_one(".srp-authors")
             )
-            authors = authors_tag.get_text(separator=", ", strip=True) if authors_tag else ""
+            authors_text = authors_tag.get_text(separator=", ", strip=True) if authors_tag else ""
+            authors = [a.strip() for a in authors_text.split(",") if a.strip()]
 
             # Abstract
             abstract_tag = (
@@ -347,7 +368,7 @@ class SSRNSearcher(PaperSource):
 
             # Date
             date_tag = block.select_one(".date") or block.select_one("span.date") or block.select_one(".srp-date")
-            pub_date = date_tag.get_text(strip=True) if date_tag else ""
+            pub_date = _parse_date(date_tag.get_text(strip=True) if date_tag else "")
 
             return Paper(
                 paper_id=paper_id or f"ssrn:{hash(raw_url)}",

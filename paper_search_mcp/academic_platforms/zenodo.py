@@ -10,6 +10,7 @@ API docs: https://developers.zenodo.org/
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import List, Optional, Dict, Any
 
 import requests
@@ -19,6 +20,20 @@ from ..paper import Paper
 from ..config import get_env
 
 logger = logging.getLogger(__name__)
+
+
+
+def _parse_date(value: str) -> Optional[datetime]:
+    """Parse a Zenodo publication_date ("YYYY", "YYYY-MM" or "YYYY-MM-DD")."""
+    value = (value or "").strip()
+    if not value:
+        return None
+    for fmt in ("%Y-%m-%d", "%Y-%m", "%Y"):
+        try:
+            return datetime.strptime(value[:10], fmt)
+        except ValueError:
+            continue
+    return None
 
 
 class ZenodoSearcher(PaperSource):
@@ -244,9 +259,7 @@ class ZenodoSearcher(PaperSource):
 
             abstract = re.sub(r"<[^>]+>", " ", abstract).strip()
 
-            pub_date = meta.get("publication_date", "")
-            if len(pub_date) >= 4:
-                pub_date = pub_date[:10]  # keep YYYY-MM-DD
+            pub_date = _parse_date(meta.get("publication_date", ""))
 
             # Pick the best available PDF url from top-level links
             pdf_url = ""
