@@ -15,6 +15,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > names, parameters, and result formats may still change between minor versions.
 
 ---
+## [Unreleased]
+
+### Fixed
+
+- **dblp: outages are no longer reported as zero results.** dblp throttles per
+  client IP with HTTP 429 and a `Retry-After` header, then with 503, and finally
+  by dropping connections. The retry loop only handled 5xx, so a 429 fell
+  straight through to the HTML fallback — which queried the same throttled host
+  with the same session, swallowed its own failure and returned an empty list.
+  From the outside an outage was indistinguishable from "no hits". `search()`
+  now retries 429 honouring `Retry-After`, paces requests at one per 1.5s, and
+  raises `DBLPUnavailable` for transport errors, error statuses, non-XML content
+  types and unparseable bodies. The HTML fallback is only used when the API
+  itself answered with a parseable but empty result.
+- **HAL, Zenodo and SSRN: results no longer fail to serialize.** All three
+  passed `published_date` as a string where `Paper` expects a `datetime`, so
+  `to_dict()` raised `AttributeError` for every result and both sources
+  reported zero hits. SSRN additionally passed a comma-joined author string
+  where a list is expected. (Adapted from upstream PR #62, extended to SSRN.)
+- **arXiv: soft rate limiting is detected.** arXiv answers a rate limit with
+  HTTP 200 and a body of `Rate exceeded.`, which the status-code-only retry
+  loop treated as an empty feed. It is now retried, raises when it persists,
+  and requests are paced to the one-per-three-seconds the arXiv terms of use
+  ask for. (Rate-limit handling from upstream PR #81.)
+- **CrossRef: sub-component types are skipped.** Peer-review material and
+  figures are registered under their own DOI and arrived as results without
+  citable content. (Search-side part of upstream PR #93.)
+- Replaced a bare `except:` in the IACR connector. (Upstream commit 48005b3.)
+
+### Added
+
+- **Per-source timeout in `search_papers`.** A single stalled provider kept the
+  whole aggregated search pending until the client gave up, discarding the
+  results of every other source. Each source now runs under a 45s cap and a
+  timeout is reported like any other per-source error. (Adapted from upstream
+  PR #55.)
+- Packaging entrypoint release checks: a `dev` extra, a metadata test for both
+  console scripts and a wheel `entry_points.txt` check in CI. (Upstream commit
+  c8b6421, re-applied to this fork's workflow.)
+
+---
 ## [0.3.4] – 2026-08-20
 
 ### Fixed
