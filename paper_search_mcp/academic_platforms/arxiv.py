@@ -11,8 +11,15 @@ from pypdf import PdfReader
 import os
 
 class ArxivSearcher(PaperSource):
-    """Searcher for arXiv papers"""
+    """Searcher for arXiv papers.
+
+    The arXiv terms of use ask for at most one request every three seconds
+    from a single connection (https://info.arxiv.org/help/api/tou.html). The
+    pacing below is per instance, so callers that reuse one searcher — the
+    MCP server and the CLI both do — stay within it.
+    """
     BASE_URL = "http://export.arxiv.org/api/query"
+    MIN_INTERVAL_SEC = 3.0  # arXiv terms of use
 
     def __init__(self):
         self.session = requests.Session()
@@ -20,6 +27,19 @@ class ArxivSearcher(PaperSource):
             'User-Agent': 'paper-search-mcp/1.0 (mailto:openags@example.com)',
             'Accept': 'application/atom+xml, application/xml;q=0.9, */*;q=0.8',
         })
+        self._last_call_at = 0.0  # monotonic seconds; 0.0 = no call yet
+
+    def _pace(self):
+        """Sleep just long enough to respect the arXiv rate limit."""
+        elapsed = time.monotonic() - self._last_call_at
+        if self._last_call_at > 0 and elapsed < self.MIN_INTERVAL_SEC:
+            time.sleep(self.MIN_INTERVAL_SEC - elapsed)
+        self._last_call_at = time.monotonic()
+
+    @staticmethod
+    def _is_rate_limited(response) -> bool:
+        """arXiv answers a soft rate limit with HTTP 200 and 'Rate exceeded.'."""
+        return (response.text or "")[:64].strip().lower().startswith("rate exceeded")
 
     def search(self, query: str, max_results: int = 10, sort_by: str = 'relevance', sort_order: str = 'descending') -> List[Paper]:
         params = {
@@ -30,12 +50,16 @@ class ArxivSearcher(PaperSource):
         }
         response = None
         for attempt in range(3):
+            self._pace()
             try:
                 response = self.session.get(self.BASE_URL, params=params, timeout=30)
             except requests.RequestException:
                 time.sleep((attempt + 1) * 1.5)
                 continue
             if response.status_code == 200:
+                if self._is_rate_limited(response):
+                    time.sleep((attempt + 1) * 5.0)  # arXiv asks for a slower cadence
+                    continue
                 break
             if response.status_code in (429, 500, 502, 503, 504):
                 time.sleep((attempt + 1) * 1.5)
@@ -44,6 +68,13 @@ class ArxivSearcher(PaperSource):
 
         if response is None or response.status_code != 200:
             return []
+
+        # Reporting a persistent rate limit as zero results is indistinguishable
+        # from an empty result set, so raise instead and let the caller record it.
+        if self._is_rate_limited(response):
+            raise requests.RequestException(
+                "arXiv rate limit: 'Rate exceeded.' persisted across 3 attempts"
+            )
 
         feed = feedparser.parse(response.content)
         papers = []
