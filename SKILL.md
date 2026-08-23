@@ -37,6 +37,11 @@ auf ISIL DE-B768) und die Paper-Suche über mehrere Datenbanken.
   die Ergebnisse da sind und gesichtet wurden.
 - **Lücken offenlegen, nicht auffüllen.** Null Treffer wird gesagt, nicht durch
   erfundene Einträge kaschiert.
+- **OpenAIRE-DOIs vor dem Zitieren prüfen.** OpenAIRE verschmilzt beim eigenen
+  Dedup gelegentlich zwei verschiedene Werke zu einem Datensatz: DOI, URL und
+  Autor*innen können dann zu drei verschiedenen Arbeiten gehören. Ein
+  OpenAIRE-Treffer wird nur genannt, wenn der DOI zum Titel passt – im Zweifel
+  über eine zweite Quelle gegenprüfen. (Upstream-Problem, nicht im Server behebbar.)
 - **Keine Volltextbeschaffung.** Dieser Skill *findet* Literatur und liefert Links
   zur Quelle. Er ruft **keine** Download-/Read-Werkzeuge auf (kein
   `download_with_fallback`, kein `download_*`, kein `read_*`). Den Volltext erhält
@@ -122,16 +127,32 @@ Erkläre den Übergang: Der Katalog zeigt die Grundlagen; für den aktuellen
 Forschungsstand braucht es Fachdatenbanken mit Zeitschriftenartikeln.
 
 - **`search_papers` mit gezielten Kernquellen, nicht `sources="all"`.**
-  Standard: `crossref,openalex,doaj` – empirisch sauber und breit.
-  `max_results_per_source` ca. 5.
-- **Quellen fachabhängig erweitern**, nicht pauschal alle:
-  - Informatik / Mathematik / Physik → zusätzlich `arxiv`
-  - Medizin / Life Sciences → zusätzlich `pubmed` und/oder `europepmc`
-  - Begründung: `arxiv` und `pubmed` lieferten bei einem Bau-/Ingenieurthema
-    reinen Fachfremd-Lärm (u. a. ein medizinisches Paper). Sie helfen nur im
-    passenden Fach.
+  `max_results_per_source` ca. 5 – nicht senken, das kostet relevante Treffer.
+  Für Aktualität das Jahr eingrenzen, nicht die Trefferzahl.
 - Englische Suchbegriffe bringen hier meist mehr Treffer; 3–8 Wörter.
-- Bei Bedarf das Jahr eingrenzen, um aktuelle Arbeiten zu priorisieren.
+
+| Auswahl | Quellen |
+|---|---|
+| Grundstock, alle Fächer | `openalex,semantic,crossref` |
+| + Bau, Umwelt, Maschinenbau | `openaire` – europäische Konferenz- und Repositorienliteratur (z. B. WCTE), sonst nirgends auffindbar |
+| + Life Sciences, Verfahrenstechnik | `europepmc` – **nicht** `pubmed`, **nicht** `pmc` |
+| + Informatik | `arxiv`, `dblp` |
+| + sobald API-Keys gesetzt | `ieee`, `acm` |
+
+Die Achse ist **Grundstock + fachliche Ergänzung**, nicht Fach → Quellenliste:
+die Quellen unterscheiden sich vor allem in der Metadatenqualität, nicht in der
+Fachabdeckung. Dazu drei Dinge, die man beim Auswerten wissen muss:
+
+- **Crossref liefert oft Titel ohne Inhalt.** Abstract-Abdeckung an identischer
+  Stichprobe: OpenAlex 99 %, Semantic Scholar 98 %, **Crossref 75 %** – und das
+  verlagsabhängig, Elsevier und ACS liefern 0 %. Deshalb steht Crossref im
+  Grundstock nicht allein.
+- **Europe PMC ersetzt `pubmed` + `pmc`.** Es bündelt PubMed-Abstracts und
+  PMC-Volltexte in einer Suche; die Dreierkombination ist weitgehend redundant.
+  `pmc` durchsucht Volltexte, zählt also jede beiläufige Erwähnung und liefert
+  entsprechend thematisch danebenliegende Treffer ohne Abstract.
+- **dblp findet gut, aber screent schlecht:** keine Abstracts, keine
+  Zitationszahlen. Für die Auswahl in dieser Stufe fehlen damit beide Signale.
 
 **Auswahl der besten Titel – das ist Claudes Aufgabe, nicht die des Tools:**
 `search_papers` aggregiert pro Quelle und dedupliziert, **rankt aber nicht
@@ -191,7 +212,7 @@ OPAC (Anfragen, Treffer, genannt; BHT vorhanden / nur Verbund) und Paper-Suche
 benennen.
 
 > Beispiel: **OPAC (subject, BHT):** 1 Anfrage, 93 Treffer, 4 genannt – alle an der BHT.
-> **Paper-Suche (crossref, openalex, doaj):** 1 Anfrage, 9 dedupliziert, 5 genannt.
+> **Paper-Suche (openalex, semantic, crossref):** 1 Anfrage, 9 dedupliziert, 5 genannt.
 > **Ohne Treffer:** keine.
 
 ## Schlusshinweis an die Person (Zugang zum Volltext)
@@ -222,7 +243,7 @@ Katalog:
 - `kobv_verbund_suche(suchbegriff, suchtyp="any", max_treffer)`
 
 Paper:
-- `search_papers(query, sources="crossref,openalex,doaj", max_results_per_source=5, year=optional)`
+- `search_papers(query, sources="openalex,semantic,crossref", max_results_per_source=5, year=optional)`
 - Quellenspezifische `search_*` (z. B. `search_openalex`) für gezielte Einzelabfragen.
 
 Zitationsverfolgung (Schneeballsystem):
@@ -244,5 +265,6 @@ Nicht verwenden (Beschaffung): `download_with_fallback`, `download_*`, `read_*`.
   ersten Suche — sie ist die Strategie, nicht die Nachbereitung.
 - **Kein `opac_erweiterte_suche`** – existiert nicht; Mehrfeld-Logik über mehrere
   `opac_suche`-Aufrufe.
-- **Instabile/fachfremde Paper-Quellen meiden:** Google Scholar, SSRN, BASE sind
-  unzuverlässig; `arxiv`/`pubmed` nur im passenden Fach zuschalten.
+- **Quellen nach der Tabelle in Stufe 2 wählen**, nicht pauschal alle. `base`
+  ist unzuverlässig, Google Scholar und SSRN stehen im Connector nicht zur
+  Verfügung.

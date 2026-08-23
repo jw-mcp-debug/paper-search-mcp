@@ -39,6 +39,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `ab_jahr` guidance for `paper_zitiert_von` moved from the tool docstring
   into `SKILL.md`, where it costs tokens only in research sessions. `SKILL.md`
   now documents the citation-chaining tools.
+- **`SKILL.md` prescribes source sets instead of one fixed default.** The axis is
+  a base set plus a subject-specific addition, because the sources differ mainly
+  in metadata quality, not in subject coverage: `openalex,semantic,crossref` as
+  the base, `openaire` for civil/environmental/mechanical engineering,
+  `europepmc` instead of `pubmed`+`pmc` for life sciences, `arxiv`+`dblp` for
+  computer science. The previous default `crossref,openalex,doaj` put Crossref —
+  75 % abstract coverage, 0 % for Elsevier and ACS — in a set without a reliable
+  abstract source. `SKILL.md` and the README now also warn that OpenAIRE DOIs
+  need verification before they are cited (see below).
+- The Semantic Scholar API key is documented as recommended rather than optional:
+  it is part of the default source set, and the anonymous pool is rate limited
+  within a few requests.
 
 ### Fixed
 

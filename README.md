@@ -214,7 +214,7 @@ needs **no** key — the KOBV Z39.50 endpoint is public.
 | `PAPER_SEARCH_MCP_UNPAYWALL_EMAIL` | Unpaywall | Recommended (Unpaywall skipped without it) | Any valid email; register at [unpaywall.org](https://unpaywall.org/products/api) |
 | `PAPER_SEARCH_MCP_OPENALEX_API_KEY` | OpenAlex | **Effectively required** (see note) | Free at [openalex.org](https://openalex.org/) |
 | `PAPER_SEARCH_MCP_CORE_API_KEY` | CORE | Optional | Free at [core.ac.uk/services/api](https://core.ac.uk/services/api) |
-| `PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY` | Semantic Scholar | Optional | Free; improves rate limits |
+| `PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY` | Semantic Scholar | **Recommended** — part of the default source set in `SKILL.md` | Free; the anonymous pool is shared and rate limited within a few requests |
 | `PAPER_SEARCH_MCP_DOAJ_API_KEY` | DOAJ | Optional | Free at [doaj.org](https://doaj.org/apply-for-api-key/) |
 | `PAPER_SEARCH_MCP_ZENODO_ACCESS_TOKEN` | Zenodo | Optional | Free at [zenodo.org](https://zenodo.org/account/settings/applications/) |
 | `PAPER_SEARCH_MCP_IEEE_API_KEY` | IEEE Xplore | Required to activate | Free at [developer.ieee.org](https://developer.ieee.org/) |
@@ -267,6 +267,15 @@ project:
 | BASE | 0 results | OAI-PMH needs institutional IP | Register at [base-search.net](https://www.base-search.net/about/en/) |
 | PMC / Europe PMC | PDF ProxyError | Local proxy blocking HTTPS PDF | Not relevant to BHT search-only use |
 | Unpaywall | Skipped | email var not set | Set `PAPER_SEARCH_MCP_UNPAYWALL_EMAIL` |
+
+
+> **OpenAIRE deduplication artefacts:** OpenAIRE merges records during its own
+> deduplication and occasionally fuses two distinct works into one. The result is
+> a record whose DOI, URL and author list belong to different papers — for example
+> `doi_dedup___::c2f9…` carrying an ETH dissertation DOI, an MDPI article URL and
+> authors matching neither. **OpenAIRE DOIs should be verified against a second
+> source before they are cited.** This happens in OpenAIRE's data, not in this
+> server, so there is nothing to fix on our side.
 
 ---
 
