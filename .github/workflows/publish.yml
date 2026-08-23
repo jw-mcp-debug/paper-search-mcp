@@ -51,6 +51,10 @@ jobs:
           tests/test_ieee.py
           tests/test_package_entrypoints.py
           tests/test_search_papers_timeout.py
+          tests/test_tool_allowlist.py
+          tests/test_dblp_errors.py
+          tests/test_arxiv_rate_limit.py
+          tests/test_published_date_types.py
           -x -q --tb=short
 
       - name: Build package

@@ -31,6 +31,40 @@ from .paper import Paper
 
 # Initialize MCP server
 mcp = FastMCP("paper_search_server")
+
+# --- Tool allowlist -------------------------------------------------------
+# PAPER_SEARCH_MCP_ENABLED_TOOLS (comma separated) restricts which tools are
+# registered. Every registered tool costs tokens in *every* request of a
+# session, whether it is used or not, so a client that only needs a handful
+# of them should not pay for all of them.
+#
+# Empty or unset registers everything, so a deployment without the variable
+# behaves exactly as before. Functions that are not registered stay
+# importable and awaitable, so the aggregation in search_papers() keeps
+# reaching every source regardless of what is exposed to the client.
+_enabled_tools = {
+    name.strip()
+    for name in get_env("ENABLED_TOOLS", "").split(",")
+    if name.strip()
+}
+_offered_tool_names: set[str] = set()
+
+if _enabled_tools:
+    _register_tool = mcp.tool
+
+    def _tool_if_enabled(*args, **kwargs):
+        def _decorate(fn):
+            name = kwargs.get("name") or fn.__name__
+            _offered_tool_names.add(name)
+            if name in _enabled_tools:
+                return _register_tool(*args, **kwargs)(fn)
+            return fn  # not registered, still callable inside the server
+
+        return _decorate
+
+    mcp.tool = _tool_if_enabled
+# --------------------------------------------------------------------------
+
 #adding KOBV OPAC Search
 from paper_search_mcp.opac.tools import register_opac_tools
 register_opac_tools(mcp)
@@ -1251,6 +1285,28 @@ if acm_searcher is not None:
             str: Extracted text content.
         """
         return acm_searcher.read_paper(paper_id, save_path)
+
+def _warn_about_unknown_enabled_tools() -> None:
+    """Report allowlist entries that match no tool.
+
+    A typo in PAPER_SEARCH_MCP_ENABLED_TOOLS would otherwise drop a tool the
+    client needs, and the only symptom would be its silent absence.
+    """
+    import difflib
+
+    for name in sorted(_enabled_tools - _offered_tool_names):
+        suggestions = difflib.get_close_matches(name, _offered_tool_names, n=3)
+        hint = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+        logger.warning(
+            "PAPER_SEARCH_MCP_ENABLED_TOOLS names unknown tool %r; it is not "
+            "registered.%s (%d tools available)",
+            name, hint, len(_offered_tool_names),
+        )
+
+
+if _enabled_tools:
+    _warn_about_unknown_enabled_tools()
+
 
 def main():
     import os

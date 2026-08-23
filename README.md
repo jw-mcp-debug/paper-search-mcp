@@ -223,6 +223,29 @@ needs **no** key — the KOBV Z39.50 endpoint is public.
 All variables follow the `PAPER_SEARCH_MCP_<NAME>` prefix scheme. Legacy names without
 the prefix are still supported for backward compatibility.
 
+### Limiting the exposed tools
+
+`PAPER_SEARCH_MCP_ENABLED_TOOLS` takes a comma-separated list of tool names and
+registers only those. Empty or unset registers all of them, so a deployment
+without the variable is unaffected.
+
+This is a token measure, not a feature switch. The tool list is part of **every**
+request a client sends, whether it does research in that turn or not. The full set
+of 56 tools costs about 14,600 tokens per request; the seven the BHT research skill
+actually calls cost about 2,900:
+
+```
+PAPER_SEARCH_MCP_ENABLED_TOOLS=opac_suche,opac_autor_suche,opac_isbn_suche,kobv_verbund_suche,search_papers,paper_referenzen,paper_zitiert_von
+```
+
+Search coverage is untouched: `search_papers` keeps querying every source in
+`ALL_SOURCES`, because the per-source functions stay callable inside the server
+even when they are not exposed as tools. A name that matches no tool is reported
+as a warning at startup, with a suggestion, so a typo cannot drop a tool silently.
+
+> **After changing the list, remove the connector in the client and add it again.**
+> A reconnect is not enough — clients cache the tool list.
+
 > **OpenAlex:** since 2026-02-13 the OpenAlex API requires a key. Without one, a
 > deployment gets roughly ten searches per day and then receives HTTP 409, which
 > surfaces as empty result lists. The former "polite pool" (mailto parameter) no

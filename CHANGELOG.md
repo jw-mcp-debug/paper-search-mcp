@@ -46,6 +46,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`PAPER_SEARCH_MCP_ENABLED_TOOLS` restricts which tools are registered.**
+  The tool list is serialized into every request a client sends, so all 56 tools
+  cost roughly 14,600 tokens per turn even in a chat that does no research at
+  all. The seven tools the BHT research skill calls cost about 2,900. Empty or
+  unset registers everything, so existing deployments are unaffected. Search
+  coverage is untouched — `search_papers` keeps querying every source, since the
+  per-source functions stay callable inside the server when they are not
+  exposed. Entries that match no tool are logged at startup with a suggestion.
 - **Per-source timeout in `search_papers`.** A single stalled provider kept the
   whole aggregated search pending until the client gave up, discarding the
   results of every other source. Each source now runs under a 45s cap and a
