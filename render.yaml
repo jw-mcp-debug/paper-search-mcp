@@ -7,6 +7,10 @@
 #
 # Delete the candidate service again once the comparison is done — the free tier
 # allows a limited number of services, and it sleeps after ~15 minutes anyway.
+#
+# Both services use Render's default Python, so they stay comparable. If a build
+# ever breaks on a new default, pin the same exact version on both services by
+# adding an env var `PYTHON_VERSION` with a full version string, e.g. 3.12.13.
 services:
   - type: web
     name: paper-search-mcp-main
