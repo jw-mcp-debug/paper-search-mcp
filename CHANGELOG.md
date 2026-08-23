@@ -17,6 +17,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 ## [Unreleased]
 
+### Changed
+
+- **Tool schemas are trimmed of everything that carries no information.** The
+  tool list is part of every request, so its cost is paid in every turn of every
+  chat. Three sources of ballast are gone: the generated `outputSchema` (an
+  informationless `{"result": ...}` wrapper for most tools, 2,598 tokens across
+  all 56), the `title` keyword pydantic derives from every field name
+  (`max_treffer` → `"title": "Max Treffer"`, 191 occurrences), and the docstring
+  indentation FastMCP copied verbatim into every description. Full tool list:
+  14,629 → 9,582 tokens; the seven tools of the BHT research skill: 2,926 →
+  2,032.
+- **The three OPAC tools take flat arguments** (`opac_suche(suchbegriff=…,
+  suchtyp=…)`) instead of a wrapped `params` object, matching
+  `kobv_verbund_suche`. Argument names, defaults and validation limits are
+  unchanged; the wrapper only added a `$defs`/`$ref` indirection and a nesting
+  level to the schema. **Callers must pass the arguments flat.**
+- Dropping the output schema also stops the server from sending every result
+  twice, once as text and once as `structuredContent`. Clients read the text;
+  LibreChat discards the structured copy entirely.
+- The `ab_jahr` guidance for `paper_zitiert_von` moved from the tool docstring
+  into `SKILL.md`, where it costs tokens only in research sessions. `SKILL.md`
+  now documents the citation-chaining tools.
+
 ### Fixed
 
 - **dblp: outages are no longer reported as zero results.** dblp throttles per

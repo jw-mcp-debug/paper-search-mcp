@@ -225,6 +225,16 @@ Paper:
 - `search_papers(query, sources="crossref,openalex,doaj", max_results_per_source=5, year=optional)`
 - Quellenspezifische `search_*` (z. B. `search_openalex`) für gezielte Einzelabfragen.
 
+Zitationsverfolgung (Schneeballsystem):
+- `paper_referenzen(kennung, max_treffer, mit_abstract=false)` – rückwärts: worauf
+  baut die Arbeit auf?
+- `paper_zitiert_von(kennung, max_treffer, ab_jahr, mit_abstract=false)` – vorwärts:
+  wer zitiert sie? **`ab_jahr` immer setzen** (z. B. `ab_jahr=2022`): die Rückgabe ist
+  nach Zitationszahl absteigend sortiert. Bei hochzitierten Grundlagenarbeiten stehen
+  deshalb ältere Arbeiten oben, und ohne Jahresfilter fällt genau der aktuelle
+  Forschungsstand heraus, den der Vorwärtsschritt liefern soll.
+- `paper_verwandte` wird nicht verwendet.
+
 Nicht verwenden (Beschaffung): `download_with_fallback`, `download_*`, `read_*`.
 
 ## Hinweise

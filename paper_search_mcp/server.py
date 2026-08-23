@@ -1,6 +1,7 @@
 # paper_search_mcp/server.py
 from typing import List, Dict, Optional, Any
 import asyncio
+import inspect
 import os
 import logging
 import re
@@ -49,20 +50,30 @@ _enabled_tools = {
 }
 _offered_tool_names: set[str] = set()
 
-if _enabled_tools:
-    _register_tool = mcp.tool
+_register_tool = mcp.tool
 
-    def _tool_if_enabled(*args, **kwargs):
-        def _decorate(fn):
-            name = kwargs.get("name") or fn.__name__
-            _offered_tool_names.add(name)
-            if name in _enabled_tools:
-                return _register_tool(*args, **kwargs)(fn)
+
+def _tool(*args, **kwargs):
+    """Register a tool, applying the allowlist and dropping structured output.
+
+    Structured output adds an `outputSchema` to every tool — for most tools an
+    informationless `{"result": ...}` wrapper — and makes the server send each
+    result twice, once as text and once as `structuredContent`. Clients read
+    the text, so the schema and the copy are pure overhead.
+    """
+    kwargs.setdefault("structured_output", False)
+
+    def _decorate(fn):
+        name = kwargs.get("name") or fn.__name__
+        _offered_tool_names.add(name)
+        if _enabled_tools and name not in _enabled_tools:
             return fn  # not registered, still callable inside the server
+        return _register_tool(*args, **kwargs)(fn)
 
-        return _decorate
+    return _decorate
 
-    mcp.tool = _tool_if_enabled
+
+mcp.tool = _tool
 # --------------------------------------------------------------------------
 
 #adding KOBV OPAC Search
@@ -1286,6 +1297,51 @@ if acm_searcher is not None:
         """
         return acm_searcher.read_paper(paper_id, save_path)
 
+_SCHEMA_CONTAINER_KEYS = ("items", "additionalProperties", "not")
+_SCHEMA_LIST_KEYS = ("anyOf", "oneOf", "allOf", "prefixItems")
+_SCHEMA_MAP_KEYS = ("properties", "$defs", "definitions", "patternProperties")
+
+
+def _strip_titles(schema: Any) -> None:
+    """Drop the `title` keyword pydantic derives from every field name.
+
+    "max_treffer" becomes `"title": "Max Treffer"`, which tells a model
+    nothing it cannot read off the property name. Keys *named* `title` inside
+    `properties` are parameter names and are kept — only the keyword is removed.
+    """
+    if not isinstance(schema, dict):
+        return
+
+    schema.pop("title", None)
+
+    for key in _SCHEMA_MAP_KEYS:
+        for value in (schema.get(key) or {}).values():
+            _strip_titles(value)
+    for key in _SCHEMA_LIST_KEYS:
+        for value in schema.get(key) or []:
+            _strip_titles(value)
+    for key in _SCHEMA_CONTAINER_KEYS:
+        _strip_titles(schema.get(key))
+
+
+def _compact_tool_schemas() -> None:
+    """Trim the tool list of text that carries no information for the model.
+
+    The tool list is serialized into every request, so docstring indentation
+    and generated titles are paid for in every turn of every chat.
+    """
+    manager = getattr(mcp, "_tool_manager", None)
+    tools = getattr(manager, "list_tools", None)
+    if tools is None:
+        logger.warning("Tool manager has no list_tools(); leaving tool schemas as generated")
+        return
+
+    for tool in tools():
+        if tool.description:
+            tool.description = inspect.cleandoc(tool.description)
+        _strip_titles(tool.parameters)
+
+
 def _warn_about_unknown_enabled_tools() -> None:
     """Report allowlist entries that match no tool.
 
@@ -1303,6 +1359,8 @@ def _warn_about_unknown_enabled_tools() -> None:
             name, hint, len(_offered_tool_names),
         )
 
+
+_compact_tool_schemas()
 
 if _enabled_tools:
     _warn_about_unknown_enabled_tools()
