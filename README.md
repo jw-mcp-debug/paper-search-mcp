@@ -321,6 +321,33 @@ re-fetches the tool list.
 > takes ~1 minute to wake. For a production service, host on always-on infrastructure
 > (e.g. a university/RZ VM) with a fixed HTTPS endpoint.
 
+### Comparing two branches on Render
+
+`render.yaml` is a Blueprint that defines two web services, one tracking `main`
+and one tracking a release candidate branch, so a change can be measured against
+the current deployment under identical conditions. Create it from the Render
+dashboard (**Blueprints → New Blueprint Instance**) and point it at this
+repository; the API keys are declared with `sync: false`, so Render asks for them
+in the dashboard and they never live in the repository.
+
+With both services up, `scripts/compare_deployments.py` talks to them over MCP
+and reports what a client actually pays for and gets back — tool-list size,
+response size, and whether the results differ:
+
+```bash
+python scripts/compare_deployments.py \
+    https://paper-search-mcp-main.onrender.com/mcp \
+    https://paper-search-mcp-candidate.onrender.com/mcp
+```
+
+It prints tool count and tool-list tokens, the response size (including the
+`structuredContent` copy, if the deployment still sends one), per-source hit
+counts and errors, and which DOIs only one side returned. `-q`, `-s` and `-n`
+change the query, the sources and the results per source. The first call against
+a sleeping free-tier service takes about a minute.
+
+Delete the candidate service when the comparison is done.
+
 ## Container Image (GHCR / Kubernetes)
 
 GitHub Actions publishes the Docker image to GitHub Container Registry:

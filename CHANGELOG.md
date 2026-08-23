@@ -15,7 +15,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > names, parameters, and result formats may still change between minor versions.
 
 ---
-## [Unreleased]
+## [0.5.0] – 2026-08-23
+
+This release bundles the packages planned as 0.4.0 through 0.5.0: the tool
+allowlist and the dblp fix (0.4.0), the schema diet and the source table in
+`SKILL.md` (0.4.1), the payload diet and the CrossRef metadata fixes (0.4.2),
+and abstract truncation plus the CrossRef filter passthrough (0.5.0). They ship
+together because they were developed on one branch.
+
+**Upgrading:** remove the connector in the client and add it again — a reconnect
+is not enough, clients cache the tool list. Callers of the OPAC tools must pass
+arguments flat instead of wrapped in `params`, and `search_papers` no longer
+returns `sources_used`, `sources_requested` and `raw_total`.
+
+Measured against 0.3.4: tool list 14,629 → 9,679 tokens, or 2,147 with the
+allowlist set to the seven tools the BHT research skill uses; search responses
+−40 % at identical results.
 
 ### Added
 
