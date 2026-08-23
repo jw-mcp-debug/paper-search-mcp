@@ -26,8 +26,11 @@ class TestSSRNSearcher(unittest.TestCase):
         self.assertEqual(paper.source, "ssrn")
         self.assertEqual(paper.title, "SSRN Parser Test")
         self.assertTrue(paper.paper_id.startswith("ssrn:"))
-        self.assertIn("Alice", paper.authors)
+        self.assertEqual(paper.authors, ["Alice Example", "Bob Example"])
         self.assertIn("sample abstract", paper.abstract)
+        # published_date must be a datetime, otherwise to_dict() raises
+        self.assertEqual(paper.to_dict()["published_date"], "2024-01-15T00:00:00")
+        self.assertEqual(paper.to_dict()["authors"], "Alice Example; Bob Example")
 
     def test_parse_results_legacy_layout(self):
         html = """
@@ -44,7 +47,8 @@ class TestSSRNSearcher(unittest.TestCase):
         papers = self.searcher._parse_results(html)
         self.assertEqual(len(papers), 1)
         self.assertEqual(papers[0].title, "Legacy SSRN Item")
-        self.assertIn("Carol", papers[0].authors)
+        self.assertEqual(papers[0].authors, ["Carol Example"])
+        self.assertEqual(papers[0].to_dict()["published_date"], "2021-01-01T00:00:00")
 
     def test_parse_results_invalid_html(self):
         papers = self.searcher._parse_results("<html><body><p>no results here</p></body></html>")
