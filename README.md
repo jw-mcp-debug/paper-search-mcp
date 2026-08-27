@@ -214,7 +214,7 @@ needs **no** key — the KOBV Z39.50 endpoint is public.
 | `PAPER_SEARCH_MCP_UNPAYWALL_EMAIL` | Unpaywall | Recommended (Unpaywall skipped without it) | Any valid email; register at [unpaywall.org](https://unpaywall.org/products/api) |
 | `PAPER_SEARCH_MCP_OPENALEX_API_KEY` | OpenAlex | **Effectively required** (see note) | Free at [openalex.org](https://openalex.org/) |
 | `PAPER_SEARCH_MCP_CORE_API_KEY` | CORE | Optional | Free at [core.ac.uk/services/api](https://core.ac.uk/services/api) |
-| `PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY` | Semantic Scholar | Optional | Free; improves rate limits |
+| `PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY` | Semantic Scholar | **Recommended** — part of the default source set in `SKILL.md` | Free; the anonymous pool is shared and rate limited within a few requests |
 | `PAPER_SEARCH_MCP_DOAJ_API_KEY` | DOAJ | Optional | Free at [doaj.org](https://doaj.org/apply-for-api-key/) |
 | `PAPER_SEARCH_MCP_ZENODO_ACCESS_TOKEN` | Zenodo | Optional | Free at [zenodo.org](https://zenodo.org/account/settings/applications/) |
 | `PAPER_SEARCH_MCP_IEEE_API_KEY` | IEEE Xplore | Required to activate | Free at [developer.ieee.org](https://developer.ieee.org/) |
@@ -222,6 +222,29 @@ needs **no** key — the KOBV Z39.50 endpoint is public.
 
 All variables follow the `PAPER_SEARCH_MCP_<NAME>` prefix scheme. Legacy names without
 the prefix are still supported for backward compatibility.
+
+### Limiting the exposed tools
+
+`PAPER_SEARCH_MCP_ENABLED_TOOLS` takes a comma-separated list of tool names and
+registers only those. Empty or unset registers all of them, so a deployment
+without the variable is unaffected.
+
+This is a token measure, not a feature switch. The tool list is part of **every**
+request a client sends, whether it does research in that turn or not. The full set
+of 56 tools costs about 14,600 tokens per request; the seven the BHT research skill
+actually calls cost about 2,900:
+
+```
+PAPER_SEARCH_MCP_ENABLED_TOOLS=opac_suche,opac_autor_suche,opac_isbn_suche,kobv_verbund_suche,search_papers,paper_referenzen,paper_zitiert_von
+```
+
+Search coverage is untouched: `search_papers` keeps querying every source in
+`ALL_SOURCES`, because the per-source functions stay callable inside the server
+even when they are not exposed as tools. A name that matches no tool is reported
+as a warning at startup, with a suggestion, so a typo cannot drop a tool silently.
+
+> **After changing the list, remove the connector in the client and add it again.**
+> A reconnect is not enough — clients cache the tool list.
 
 > **OpenAlex:** since 2026-02-13 the OpenAlex API requires a key. Without one, a
 > deployment gets roughly ten searches per day and then receives HTTP 409, which
@@ -244,6 +267,15 @@ project:
 | BASE | 0 results | OAI-PMH needs institutional IP | Register at [base-search.net](https://www.base-search.net/about/en/) |
 | PMC / Europe PMC | PDF ProxyError | Local proxy blocking HTTPS PDF | Not relevant to BHT search-only use |
 | Unpaywall | Skipped | email var not set | Set `PAPER_SEARCH_MCP_UNPAYWALL_EMAIL` |
+
+
+> **OpenAIRE deduplication artefacts:** OpenAIRE merges records during its own
+> deduplication and occasionally fuses two distinct works into one. The result is
+> a record whose DOI, URL and author list belong to different papers — for example
+> `doi_dedup___::c2f9…` carrying an ETH dissertation DOI, an MDPI article URL and
+> authors matching neither. **OpenAIRE DOIs should be verified against a second
+> source before they are cited.** This happens in OpenAIRE's data, not in this
+> server, so there is nothing to fix on our side.
 
 ---
 
@@ -288,6 +320,33 @@ re-fetches the tool list.
 > Note: the free tier sleeps after ~15 minutes of inactivity; the first request then
 > takes ~1 minute to wake. For a production service, host on always-on infrastructure
 > (e.g. a university/RZ VM) with a fixed HTTPS endpoint.
+
+### Comparing two branches on Render
+
+`render.yaml` is a Blueprint that defines two web services, one tracking `main`
+and one tracking a release candidate branch, so a change can be measured against
+the current deployment under identical conditions. Create it from the Render
+dashboard (**Blueprints → New Blueprint Instance**) and point it at this
+repository; the API keys are declared with `sync: false`, so Render asks for them
+in the dashboard and they never live in the repository.
+
+With both services up, `scripts/compare_deployments.py` talks to them over MCP
+and reports what a client actually pays for and gets back — tool-list size,
+response size, and whether the results differ:
+
+```bash
+python scripts/compare_deployments.py \
+    https://paper-search-mcp-main.onrender.com/mcp \
+    https://paper-search-mcp-candidate.onrender.com/mcp
+```
+
+It prints tool count and tool-list tokens, the response size (including the
+`structuredContent` copy, if the deployment still sends one), per-source hit
+counts and errors, and which DOIs only one side returned. `-q`, `-s` and `-n`
+change the query, the sources and the results per source. The first call against
+a sleeping free-tier service takes about a minute.
+
+Delete the candidate service when the comparison is done.
 
 ## Container Image (GHCR / Kubernetes)
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import datetime
 from typing import List, Optional, Dict, Any
 
 import requests
@@ -19,6 +20,21 @@ from .base import PaperSource
 from ..paper import Paper
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_date(value: str) -> Optional[datetime]:
+    """Parse a HAL date string ("YYYY" or "YYYY-MM-DD") into a datetime."""
+    value = (value or "").strip()
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value[:10])
+    except ValueError:
+        pass
+    try:
+        return datetime(int(value[:4]), 1, 1)
+    except (ValueError, TypeError):
+        return None
 
 
 class HALSearcher(PaperSource):
@@ -239,9 +255,10 @@ class HALSearcher(PaperSource):
                 doi = doi[0] if doi else ""
 
             year = doc.get("publicationDateY_i") or doc.get("producedDateY_i", "")
-            pub_date = (
+            date_str = (
                 str(year) if year else (doc.get("submittedDate_s", "") or "")[:10]
             )
+            pub_date = _parse_date(date_str)
 
             pdf_url = doc.get("fileMain_s", "") or ""
             record_url = doc.get("uri_s", f"https://hal.archives-ouvertes.fr/{hal_id}")
@@ -252,7 +269,7 @@ class HALSearcher(PaperSource):
                 authors=authors,
                 abstract=abstract.strip(),
                 doi=doi,
-                published_date=str(pub_date),
+                published_date=pub_date,
                 pdf_url=pdf_url,
                 url=record_url,
                 source="hal",

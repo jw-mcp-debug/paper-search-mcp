@@ -1,0 +1,50 @@
+# Render Blueprint: one web service per branch, so a release candidate can be
+# compared against the current main under identical conditions.
+#
+# Create it from the Render dashboard (Blueprints → New Blueprint Instance) and
+# point it at this repository. Secrets are declared with `sync: false`, which
+# means Render asks for them in the dashboard and they never live in the repo.
+#
+# Delete the candidate service again once the comparison is done — the free tier
+# allows a limited number of services, and it sleeps after ~15 minutes anyway.
+#
+# Both services use Render's default Python, so they stay comparable. If a build
+# ever breaks on a new default, pin the same exact version on both services by
+# adding an env var `PYTHON_VERSION` with a full version string, e.g. 3.12.13.
+services:
+  - type: web
+    name: paper-search-mcp-main
+    runtime: python
+    branch: main
+    region: frankfurt
+    plan: free
+    buildCommand: bash setup.sh
+    startCommand: python -m paper_search_mcp.server
+    envVars:
+      - key: PAPER_SEARCH_MCP_UNPAYWALL_EMAIL
+        sync: false
+      - key: PAPER_SEARCH_MCP_OPENALEX_API_KEY
+        sync: false
+      - key: PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY
+        sync: false
+
+  - type: web
+    name: paper-search-mcp-candidate
+    runtime: python
+    branch: work/v0.4.0
+    region: frankfurt
+    plan: free
+    buildCommand: bash setup.sh
+    startCommand: python -m paper_search_mcp.server
+    envVars:
+      - key: PAPER_SEARCH_MCP_UNPAYWALL_EMAIL
+        sync: false
+      - key: PAPER_SEARCH_MCP_OPENALEX_API_KEY
+        sync: false
+      - key: PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY
+        sync: false
+      # To measure the tool allowlist, set PAPER_SEARCH_MCP_ENABLED_TOOLS in the
+      # dashboard for this service only:
+      #   opac_suche,opac_autor_suche,opac_isbn_suche,kobv_verbund_suche,
+      #   search_papers,paper_referenzen,paper_zitiert_von
+      # Leave it unset for a like-for-like comparison against main.

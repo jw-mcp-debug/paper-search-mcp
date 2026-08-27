@@ -15,6 +15,154 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > names, parameters, and result formats may still change between minor versions.
 
 ---
+## [0.5.0] – 2026-08-23
+
+This release bundles the packages planned as 0.4.0 through 0.5.0: the tool
+allowlist and the dblp fix (0.4.0), the schema diet and the source table in
+`SKILL.md` (0.4.1), the payload diet and the CrossRef metadata fixes (0.4.2),
+and abstract truncation plus the CrossRef filter passthrough (0.5.0). They ship
+together because they were developed on one branch.
+
+**Upgrading:** remove the connector in the client and add it again — a reconnect
+is not enough, clients cache the tool list. Callers of the OPAC tools must pass
+arguments flat instead of wrapped in `params`, and `search_papers` no longer
+returns `sources_used`, `sources_requested` and `raw_total`.
+
+Measured against 0.3.4: tool list 14,629 → 9,679 tokens, or 2,147 with the
+allowlist set to the seven tools the BHT research skill uses; search responses
+−40 % at identical results.
+
+### Added
+
+- **`search_papers(abstract_chars=600)` shortens abstracts.** Abstracts are by
+  far the largest field of a result — 1,599 of 2,781 tokens in a reference query
+  — and screening works on the first few sentences. Truncation cuts on a word
+  boundary and marks the cut with ` […]`. **`abstract_chars=0` keeps them whole**,
+  which is what harvesting search terms from abstracts needs; `SKILL.md` says so
+  at the step where that happens. Measured on identical results: 2,781 → 2,061
+  tokens.
+- **`search_papers(crossref_filter=…)` passes a CrossRef filter into the
+  aggregation**, so it applies with deduplication and error handling rather than
+  requiring a separate `search_crossref` call. `type:journal-article` filters out
+  the dissertations and proceedings that dominated the CrossRef share of a
+  reference query; results carrying an abstract rose from 5 to 7 of 10.
+
+### Changed
+
+- **Search results carry only what helps judge a paper.** `Paper.to_dict()`
+  serialized all 15 fields including the empty ones; `updated_date`, `keywords`
+  and `references` were empty in every result of a reference query. Empty fields
+  are now omitted, `published_date` is the year, a `url` that only restates the
+  DOI and a `paper_id` identical to the DOI are dropped, `extra` is a real dict
+  limited to the fields that help judgement instead of a stringified one,
+  `categories` is capped at three, and author lists are capped at three names
+  plus `u. a. (n=47)` — hyperauthorship papers could otherwise cost more than a
+  thousand tokens for a single result. Measured on an identical query with
+  identical results: 3,459 → 2,781 tokens, 346 → 278 per paper.
+- **`search_papers` no longer returns `sources_used`, `sources_requested` and
+  `raw_total`.** The first restates the keys of `source_results`, the other two
+  were debugging aids, and all three are paid for on every call.
+
+- **Tool schemas are trimmed of everything that carries no information.** The
+  tool list is part of every request, so its cost is paid in every turn of every
+  chat. Three sources of ballast are gone: the generated `outputSchema` (an
+  informationless `{"result": ...}` wrapper for most tools, 2,598 tokens across
+  all 56), the `title` keyword pydantic derives from every field name
+  (`max_treffer` → `"title": "Max Treffer"`, 191 occurrences), and the docstring
+  indentation FastMCP copied verbatim into every description. Full tool list:
+  14,629 → 9,564 tokens; the seven tools of the BHT research skill: 2,926 →
+  2,032.
+- **The three OPAC tools take flat arguments** (`opac_suche(suchbegriff=…,
+  suchtyp=…)`) instead of a wrapped `params` object, matching
+  `kobv_verbund_suche`. Argument names, defaults and validation limits are
+  unchanged; the wrapper only added a `$defs`/`$ref` indirection and a nesting
+  level to the schema. **Callers must pass the arguments flat.**
+- Dropping the output schema also stops the server from sending every result
+  twice, once as text and once as `structuredContent`. Clients read the text;
+  LibreChat discards the structured copy entirely.
+- The `ab_jahr` guidance for `paper_zitiert_von` moved from the tool docstring
+  into `SKILL.md`, where it costs tokens only in research sessions. `SKILL.md`
+  now documents the citation-chaining tools.
+- **`SKILL.md` prescribes source sets instead of one fixed default.** The axis is
+  a base set plus a subject-specific addition, because the sources differ mainly
+  in metadata quality, not in subject coverage: `openalex,semantic,crossref` as
+  the base, `openaire` for civil/environmental/mechanical engineering,
+  `europepmc` instead of `pubmed`+`pmc` for life sciences, `arxiv`+`dblp` for
+  computer science. The previous default `crossref,openalex,doaj` put Crossref —
+  75 % abstract coverage, 0 % for Elsevier and ACS — in a set without a reliable
+  abstract source. `SKILL.md` and the README now also warn that OpenAIRE DOIs
+  need verification before they are cited (see below).
+- The Semantic Scholar API key is documented as recommended rather than optional:
+  it is part of the default source set, and the anonymous pool is rate limited
+  within a few requests.
+
+### Fixed
+
+- **CrossRef: a missing date is no longer filled with 1970-01-01.** The
+  placeholder corrupted every year filter and sort — and it did more damage than
+  that: `_extract_date` substituted 1970 whenever the year part was missing, and
+  since that value is truthy, the fallback chain `published` → `issued` →
+  `created` stopped at the first field and never reached the one that had the
+  real date. Three of five results for a reference query carried 1970-01-01;
+  after the fix all three carry their actual publication year.
+- **CrossRef: abstracts are stripped of JATS markup.** They arrived with
+  `<jats:p>`, `<jats:title>`, `<jats:italic>` and friends, which cost tokens and
+  get in the way while screening. A leading "Abstract" heading goes with it.
+- **Deduplication merges instead of discarding, and matches across sources.**
+  The unique key ignored casing and singular/plural, so "… to a Microservices
+  Architecture" (CrossRef) and "… to a microservice architecture" (dblp) both
+  reached the client; it also mixed the author string into the key, where
+  sources disagree on formatting. Titles are now normalized and paired with the
+  year. When a duplicate is found, empty fields are filled from it, the higher
+  citation count and the longer abstract win, and `extra` is merged key by key —
+  previously whichever source answered first won outright, so a record without
+  an abstract could displace one that had it.
+
+- **dblp: outages are no longer reported as zero results.** dblp throttles per
+  client IP with HTTP 429 and a `Retry-After` header, then with 503, and finally
+  by dropping connections. The retry loop only handled 5xx, so a 429 fell
+  straight through to the HTML fallback — which queried the same throttled host
+  with the same session, swallowed its own failure and returned an empty list.
+  From the outside an outage was indistinguishable from "no hits". `search()`
+  now retries 429 honouring `Retry-After`, paces requests at one per 1.5s, and
+  raises `DBLPUnavailable` for transport errors, error statuses, non-XML content
+  types and unparseable bodies. The HTML fallback is only used when the API
+  itself answered with a parseable but empty result.
+- **HAL, Zenodo and SSRN: results no longer fail to serialize.** All three
+  passed `published_date` as a string where `Paper` expects a `datetime`, so
+  `to_dict()` raised `AttributeError` for every result and both sources
+  reported zero hits. SSRN additionally passed a comma-joined author string
+  where a list is expected. (Adapted from upstream PR #62, extended to SSRN.)
+- **arXiv: soft rate limiting is detected.** arXiv answers a rate limit with
+  HTTP 200 and a body of `Rate exceeded.`, which the status-code-only retry
+  loop treated as an empty feed. It is now retried, raises when it persists,
+  and requests are paced to the one-per-three-seconds the arXiv terms of use
+  ask for. (Rate-limit handling from upstream PR #81.)
+- **CrossRef: sub-component types are skipped.** Peer-review material and
+  figures are registered under their own DOI and arrived as results without
+  citable content. (Search-side part of upstream PR #93.)
+- Replaced a bare `except:` in the IACR connector. (Upstream commit 48005b3.)
+
+### Added
+
+- **`PAPER_SEARCH_MCP_ENABLED_TOOLS` restricts which tools are registered.**
+  The tool list is serialized into every request a client sends, so all 56 tools
+  cost roughly 14,600 tokens per turn even in a chat that does no research at
+  all. The seven tools the BHT research skill calls cost about 2,900. Empty or
+  unset registers everything, so existing deployments are unaffected. Search
+  coverage is untouched — `search_papers` keeps querying every source, since the
+  per-source functions stay callable inside the server when they are not
+  exposed. Entries that match no tool are logged at startup with a suggestion.
+- **Per-source timeout in `search_papers`.** A single stalled provider kept the
+  whole aggregated search pending until the client gave up, discarding the
+  results of every other source. Each source now runs under a 45s cap and a
+  timeout is reported like any other per-source error. (Adapted from upstream
+  PR #55.)
+- Packaging entrypoint release checks: a `dev` extra, a metadata test for both
+  console scripts and a wheel `entry_points.txt` check in CI. (Upstream commit
+  c8b6421, re-applied to this fork's workflow.)
+
+---
 ## [0.3.4] – 2026-08-20
 
 ### Fixed

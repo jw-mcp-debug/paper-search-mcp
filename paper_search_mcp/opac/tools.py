@@ -18,7 +18,7 @@ nicht von der mcp-Instanz ab); nur die mit @mcp.tool dekorierten Funktionen
 liegen in register_opac_tools.
 """
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import Field
 
 from .z3950_client import suche_bht, BIB1_ATTR, BHT_ISIL
 
@@ -127,79 +127,6 @@ def _formatiere_ergebnisse(daten: dict, suchbegriff: str,
 
 
 # ---------------------------------------------------------------------------
-# Input-Modelle
-# ---------------------------------------------------------------------------
-
-class OpacSucheInput(BaseModel):
-    """Parameter für die allgemeine OPAC-Suche im BHT-Bestand."""
-    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-
-    suchbegriff: str = Field(
-        ...,
-        description=(
-            "Suchbegriff: Titel, Autor, Schlagwort oder freier Text. "
-            "Mehrere Wörter werden bei 'any'/'title'/'author' UND-verknüpft "
-            "(alle Wörter müssen vorkommen, nicht als starre Phrase), "
-            "z.B. 'Beton Nachhaltigkeit'. Bei 'subject' zählt die Mehrwort-"
-            "Eingabe als GND-Schlagwort-Phrase, z.B. 'Nachhaltiges Bauen'."
-        ),
-        min_length=2,
-        max_length=200,
-    )
-    suchtyp: str = Field(
-        default="any",
-        description=(
-            "Art der Suche: "
-            "'any' = Alle Felder (Standard), "
-            "'title' = Nur Titel, "
-            "'author' = Nur Autor/Herausgeber, "
-            "'subject' = Nur Schlagwort (GND)"
-        ),
-    )
-    max_treffer: int = Field(
-        default=10,
-        description="Maximale Anzahl Treffer (1–25)",
-        ge=1, le=25,
-    )
-    nur_bht_bestand: bool = Field(
-        default=True,
-        description=(
-            "True (Standard): Nur Titel im BHT-Bestand (ISIL DE-B768). "
-            "False: Gesamter KOBV-Verbund (für Fernleihe-Recherche)."
-        ),
-    )
-
-
-class IsbnSucheInput(BaseModel):
-    """Parameter für die ISBN-Suche."""
-    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-
-    isbn: str = Field(
-        ...,
-        description="ISBN-10 oder ISBN-13, mit oder ohne Bindestriche",
-        min_length=10,
-        max_length=20,
-    )
-
-
-class AutorSucheInput(BaseModel):
-    """Parameter für die Autorensuche."""
-    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-
-    autor: str = Field(
-        ...,
-        description=(
-            "Name des Autors oder der Autorin, vorzugsweise als "
-            "'Nachname, Vorname' oder nur Nachname"
-        ),
-        min_length=2,
-        max_length=100,
-    )
-    max_treffer: int = Field(default=10, ge=1, le=25)
-    nur_bht_bestand: bool = Field(default=True)
-
-
-# ---------------------------------------------------------------------------
 # Registrierung der Tools auf der geteilten FastMCP-Instanz
 # ---------------------------------------------------------------------------
 
@@ -216,7 +143,35 @@ def register_opac_tools(mcp):
             "openWorldHint": True,
         },
     )
-    async def opac_suche(params: OpacSucheInput) -> str:
+    async def opac_suche(
+        suchbegriff: str = Field(
+            ...,
+            description=(
+                "Suchbegriff: Titel, Autor, Schlagwort oder freier Text. "
+                "Mehrere Wörter werden bei 'any'/'title'/'author' UND-verknüpft "
+                "(alle Wörter müssen vorkommen, nicht als starre Phrase), "
+                "z.B. 'Beton Nachhaltigkeit'. Bei 'subject' zählt die Mehrwort-"
+                "Eingabe als GND-Schlagwort-Phrase, z.B. 'Nachhaltiges Bauen'."
+            ),
+            min_length=2,
+            max_length=200,
+        ),
+        suchtyp: str = Field(
+            default="any",
+            description=(
+                "'any' = Alle Felder (Standard), 'title' = Nur Titel, "
+                "'author' = Nur Autor/Herausgeber, 'subject' = Nur Schlagwort (GND)"
+            ),
+        ),
+        max_treffer: int = Field(default=10, description="Maximale Anzahl Treffer (1–25)", ge=1, le=25),
+        nur_bht_bestand: bool = Field(
+            default=True,
+            description=(
+                "True (Standard): Nur Titel im BHT-Bestand (ISIL DE-B768). "
+                "False: Gesamter KOBV-Verbund (für Fernleihe-Recherche)."
+            ),
+        ),
+    ) -> str:
         """
         Durchsucht den OPAC der Berliner Hochschule für Technik (BHT)
         über den Z39.50-Server des KOBV.
@@ -224,17 +179,18 @@ def register_opac_tools(mcp):
         Standardmäßig gefiltert auf den BHT-Bestand (ISIL DE-B768).
         Kann auf den gesamten KOBV-Verbund erweitert werden.
         """
-        use_attr = BIB1_ATTR.get(params.suchtyp, BIB1_ATTR["any"])
-        isil = BHT_ISIL if params.nur_bht_bestand else None
-        modus = "BHT-OPAC" if params.nur_bht_bestand else "KOBV-Verbund"
+        suchbegriff = suchbegriff.strip()
+        use_attr = BIB1_ATTR.get(suchtyp, BIB1_ATTR["any"])
+        isil = BHT_ISIL if nur_bht_bestand else None
+        modus = "BHT-OPAC" if nur_bht_bestand else "KOBV-Verbund"
 
         daten = await suche_bht(
             use_attr=use_attr,
-            term=params.suchbegriff,
+            term=suchbegriff,
             isil=isil,
-            max_records=params.max_treffer,
+            max_records=max_treffer,
         )
-        return _formatiere_ergebnisse(daten, params.suchbegriff, modus)
+        return _formatiere_ergebnisse(daten, suchbegriff, modus)
 
     @mcp.tool(
         name="opac_isbn_suche",
@@ -246,7 +202,14 @@ def register_opac_tools(mcp):
             "openWorldHint": True,
         },
     )
-    async def opac_isbn_suche(params: IsbnSucheInput) -> str:
+    async def opac_isbn_suche(
+        isbn: str = Field(
+            ...,
+            description="ISBN-10 oder ISBN-13, mit oder ohne Bindestriche",
+            min_length=10,
+            max_length=20,
+        ),
+    ) -> str:
         """
         Prüft, ob ein Titel anhand der ISBN im BHT-OPAC vorhanden ist.
 
@@ -254,7 +217,8 @@ def register_opac_tools(mcp):
         wird automatisch der gesamte KOBV-Verbund durchsucht und auf
         Fernleihe-Möglichkeiten hingewiesen.
         """
-        isbn_clean = params.isbn.replace("-", "").replace(" ", "")
+        isbn = isbn.strip()
+        isbn_clean = isbn.replace("-", "").replace(" ", "")
 
         # Erst BHT-Bestand prüfen
         daten = await suche_bht(
@@ -265,7 +229,7 @@ def register_opac_tools(mcp):
         )
 
         if daten.get("treffer_gesamt", 0) > 0:
-            return _formatiere_ergebnisse(daten, f"ISBN: {params.isbn}", "BHT-OPAC")
+            return _formatiere_ergebnisse(daten, f"ISBN: {isbn}", "BHT-OPAC")
 
         # Nicht in BHT – Verbund prüfen
         daten_verbund = await suche_bht(
@@ -277,10 +241,10 @@ def register_opac_tools(mcp):
 
         if daten_verbund.get("treffer_gesamt", 0) > 0:
             ergebnis = _formatiere_ergebnisse(
-                daten_verbund, f"ISBN: {params.isbn}", "KOBV-Verbund"
+                daten_verbund, f"ISBN: {isbn}", "KOBV-Verbund"
             )
             return (
-                f"## ISBN {params.isbn} – Nicht im BHT-Bestand\n\n"
+                f"## ISBN {isbn} – Nicht im BHT-Bestand\n\n"
                 f"Dieses Werk ist **nicht** in der BHT-Bibliothek vorhanden, "
                 f"aber im KOBV-Verbund nachgewiesen:\n\n"
                 + ergebnis
@@ -289,7 +253,7 @@ def register_opac_tools(mcp):
             )
 
         return (
-            f"## ISBN {params.isbn} – Nicht gefunden\n\n"
+            f"## ISBN {isbn} – Nicht gefunden\n\n"
             f"Dieses Werk ist weder im BHT-Bestand noch im KOBV-Verbund nachgewiesen.\n\n"
             f"**Alternativen:**\n"
             f"- Andere ISBN-Ausgabe prüfen (andere Auflage?)\n"
@@ -307,23 +271,39 @@ def register_opac_tools(mcp):
             "openWorldHint": True,
         },
     )
-    async def opac_autor_suche(params: AutorSucheInput) -> str:
+    async def opac_autor_suche(
+        autor: str = Field(
+            ...,
+            description=(
+                "Name des Autors oder der Autorin, vorzugsweise als "
+                "'Nachname, Vorname' oder nur Nachname"
+            ),
+            min_length=2,
+            max_length=100,
+        ),
+        max_treffer: int = Field(default=10, description="Maximale Anzahl Treffer (1–25)", ge=1, le=25),
+        nur_bht_bestand: bool = Field(
+            default=True,
+            description="True (Standard): Nur BHT-Bestand. False: Gesamter KOBV-Verbund.",
+        ),
+    ) -> str:
         """
         Sucht alle Werke eines Autors/einer Autorin im BHT-OPAC.
 
         Nützlich um zu prüfen, welche Werke eines Autors die BHT-Bibliothek
         besitzt, z.B. für Semesterapparate oder Lehrbuchlisten.
         """
-        isil = BHT_ISIL if params.nur_bht_bestand else None
-        modus = f"BHT-OPAC (Autor: {params.autor})"
+        autor = autor.strip()
+        isil = BHT_ISIL if nur_bht_bestand else None
+        modus = f"BHT-OPAC (Autor: {autor})"
 
         daten = await suche_bht(
             use_attr=BIB1_ATTR["author"],
-            term=params.autor,
+            term=autor,
             isil=isil,
-            max_records=params.max_treffer,
+            max_records=max_treffer,
         )
-        return _formatiere_ergebnisse(daten, params.autor, modus)
+        return _formatiere_ergebnisse(daten, autor, modus)
 
     @mcp.tool(
         name="kobv_verbund_suche",

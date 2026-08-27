@@ -1,6 +1,7 @@
 # paper_search_mcp/server.py
 from typing import List, Dict, Optional, Any
 import asyncio
+import inspect
 import os
 import logging
 import re
@@ -31,6 +32,50 @@ from .paper import Paper
 
 # Initialize MCP server
 mcp = FastMCP("paper_search_server")
+
+# --- Tool allowlist -------------------------------------------------------
+# PAPER_SEARCH_MCP_ENABLED_TOOLS (comma separated) restricts which tools are
+# registered. Every registered tool costs tokens in *every* request of a
+# session, whether it is used or not, so a client that only needs a handful
+# of them should not pay for all of them.
+#
+# Empty or unset registers everything, so a deployment without the variable
+# behaves exactly as before. Functions that are not registered stay
+# importable and awaitable, so the aggregation in search_papers() keeps
+# reaching every source regardless of what is exposed to the client.
+_enabled_tools = {
+    name.strip()
+    for name in get_env("ENABLED_TOOLS", "").split(",")
+    if name.strip()
+}
+_offered_tool_names: set[str] = set()
+
+_register_tool = mcp.tool
+
+
+def _tool(*args, **kwargs):
+    """Register a tool, applying the allowlist and dropping structured output.
+
+    Structured output adds an `outputSchema` to every tool — for most tools an
+    informationless `{"result": ...}` wrapper — and makes the server send each
+    result twice, once as text and once as `structuredContent`. Clients read
+    the text, so the schema and the copy are pure overhead.
+    """
+    kwargs.setdefault("structured_output", False)
+
+    def _decorate(fn):
+        name = kwargs.get("name") or fn.__name__
+        _offered_tool_names.add(name)
+        if _enabled_tools and name not in _enabled_tools:
+            return fn  # not registered, still callable inside the server
+        return _register_tool(*args, **kwargs)(fn)
+
+    return _decorate
+
+
+mcp.tool = _tool
+# --------------------------------------------------------------------------
+
 #adding KOBV OPAC Search
 from paper_search_mcp.opac.tools import register_opac_tools
 register_opac_tools(mcp)
@@ -73,6 +118,22 @@ async def async_search(searcher, query: str, max_results: int, **kwargs) -> List
     else:
         papers = await asyncio.to_thread(searcher.search, query, max_results=max_results)
     return [paper.to_dict() for paper in papers]
+
+
+
+# Upper bound per source in search_papers. Without it a single stalled
+# provider keeps the whole aggregated search pending until the MCP client
+# gives up, which loses the results of every other source.
+SOURCE_TIMEOUT_SECONDS = 45
+
+
+async def _run_search_with_timeout(source_name: str, search_task):
+    try:
+        return await asyncio.wait_for(search_task, timeout=SOURCE_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError as exc:
+        raise TimeoutError(
+            f"search for source '{source_name}' timed out after {SOURCE_TIMEOUT_SECONDS} seconds"
+        ) from exc
 
 
 ALL_SOURCES = [
@@ -130,29 +191,90 @@ def _parse_sources(sources: str) -> List[str]:
     return [source for source in normalized if source in ALL_SOURCES]
 
 
+_TITLE_NOISE = re.compile(r"[^a-z0-9 ]+")
+
+
+def _normalize_title(title: str) -> str:
+    """Normalize a title so the same paper matches across sources.
+
+    Sources disagree on casing and on singular versus plural — "Stepwise
+    Migration of a Monolith to a Microservices Architecture" from CrossRef and
+    "Stepwise migration of a monolith to a microservice architecture" from dblp
+    are the same paper, and without normalization both reach the client.
+    """
+    words = _TITLE_NOISE.sub(" ", (title or "").lower()).split()
+    return " ".join(word[:-1] if len(word) > 4 and word.endswith("s") else word for word in words)
+
+
 def _paper_unique_key(paper: Dict[str, Any]) -> str:
     doi = (paper.get("doi") or "").strip().lower()
     if doi:
         return f"doi:{doi}"
 
-    title = (paper.get("title") or "").strip().lower()
-    authors = (paper.get("authors") or "").strip().lower()
+    title = _normalize_title(paper.get("title") or "")
     if title:
-        return f"title:{title}|authors:{authors}"
+        # The year guards against two different works sharing a generic title.
+        year = (str(paper.get("published_date") or ""))[:4]
+        return f"title:{title}|year:{year}"
 
     paper_id = (paper.get("paper_id") or "").strip().lower()
     return f"id:{paper_id}"
 
 
+_EMPTY_VALUES = ("", [], {}, None, 0)
+
+
+def _merge_paper(kept: Dict[str, Any], duplicate: Dict[str, Any]) -> None:
+    """Fill gaps in the kept record from its duplicate.
+
+    Whoever answered first used to win outright, so a CrossRef record without
+    an abstract could displace the OpenAlex record that had one. Merging costs
+    nothing and keeps the richer data.
+    """
+    for key, value in duplicate.items():
+        if value in _EMPTY_VALUES:
+            continue
+
+        current = kept.get(key)
+        if current in _EMPTY_VALUES:
+            kept[key] = value
+        elif key == "citations":
+            kept[key] = max(current, value)
+        elif key == "abstract" and len(str(value)) > len(str(current)):
+            kept[key] = value
+        elif key == "extra" and isinstance(current, dict) and isinstance(value, dict):
+            for extra_key, extra_value in value.items():
+                current.setdefault(extra_key, extra_value)
+
+
+def _truncate_abstract(abstract: str, limit: int) -> str:
+    """Shorten an abstract to `limit` characters, cutting on a word boundary.
+
+    Abstracts are the largest field of a result and dominate what a session
+    accumulates. Screening works on the first few sentences; harvesting search
+    terms does not, which is why the caller can switch truncation off.
+    """
+    if limit <= 0 or len(abstract) <= limit:
+        return abstract
+
+    cut = abstract[:limit]
+    boundary = cut.rfind(" ")
+    if boundary > limit // 2:
+        cut = cut[:boundary]
+    return cut.rstrip(" ,;:.-") + " […]"
+
+
 def _dedupe_papers(papers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     deduped: List[Dict[str, Any]] = []
-    seen: set[str] = set()
+    seen: Dict[str, Dict[str, Any]] = {}
 
     for paper in papers:
         key = _paper_unique_key(paper)
-        if key in seen:
+        kept = seen.get(key)
+        if kept is not None:
+            _merge_paper(kept, paper)
             continue
-        seen.add(key)
+        seen[key] = paper
         deduped.append(paper)
 
     return deduped
@@ -241,6 +363,8 @@ async def search_papers(
     max_results_per_source: int = 5,
     sources: str = "all",
     year: Optional[str] = None,
+    abstract_chars: int = 600,
+    crossref_filter: str = "",
 ) -> Dict[str, Any]:
     """Unified top-level search across all configured academic platforms.
 
@@ -251,6 +375,10 @@ async def search_papers(
             Available: arxiv,pubmed,biorxiv,medrxiv,iacr,semantic,crossref,openalex,pmc,core,europepmc,dblp,openaire,doaj,base,zenodo,hal,unpaywall
             (ieee and acm are added automatically when their API keys are configured)
         year: Optional year filter for Semantic Scholar only.
+        abstract_chars: Truncate abstracts to this many characters; 0 keeps them
+            in full, which is what harvesting search terms from abstracts needs.
+        crossref_filter: CrossRef filter applied inside the aggregation, e.g.
+            'type:journal-article' or 'from-pub-date:2020-01-01'.
     Returns:
         Aggregated dictionary with per-source stats, errors, and deduplicated papers.
     """
@@ -282,7 +410,9 @@ async def search_papers(
         elif source == "semantic":
             task_map[source] = search_semantic(query, year=year, max_results=max_results_per_source)
         elif source == "crossref":
-            task_map[source] = search_crossref(query, max_results=max_results_per_source)
+            task_map[source] = search_crossref(
+                query, max_results=max_results_per_source, filter=crossref_filter or None
+            )
         elif source == "openalex":
             task_map[source] = search_openalex(query, max_results_per_source)
         elif source == "pmc":
@@ -313,7 +443,10 @@ async def search_papers(
                 task_map[source] = async_search(acm_searcher, query, max_results_per_source)
 
     source_names = list(task_map.keys())
-    source_outputs = await asyncio.gather(*task_map.values(), return_exceptions=True)
+    source_outputs = await asyncio.gather(
+        *(_run_search_with_timeout(name, task) for name, task in task_map.items()),
+        return_exceptions=True,
+    )
 
     source_results: Dict[str, int] = {}
     errors: Dict[str, str] = {}
@@ -332,16 +465,20 @@ async def search_papers(
             merged_papers.append(paper)
 
     deduped_papers = _dedupe_papers(merged_papers)
+    if abstract_chars > 0:
+        for paper in deduped_papers:
+            abstract = paper.get("abstract")
+            if abstract:
+                paper["abstract"] = _truncate_abstract(abstract, abstract_chars)
 
+    # sources_used restates the keys of source_results, and sources_requested
+    # and raw_total were debugging aids — all three are paid for per call.
     return {
         "query": query,
-        "sources_requested": sources,
-        "sources_used": source_names,
         "source_results": source_results,
         "errors": errors,
         "papers": deduped_papers,
         "total": len(deduped_papers),
-        "raw_total": len(merged_papers),
     }
 
 
@@ -1232,6 +1369,75 @@ if acm_searcher is not None:
             str: Extracted text content.
         """
         return acm_searcher.read_paper(paper_id, save_path)
+
+_SCHEMA_CONTAINER_KEYS = ("items", "additionalProperties", "not")
+_SCHEMA_LIST_KEYS = ("anyOf", "oneOf", "allOf", "prefixItems")
+_SCHEMA_MAP_KEYS = ("properties", "$defs", "definitions", "patternProperties")
+
+
+def _strip_titles(schema: Any) -> None:
+    """Drop the `title` keyword pydantic derives from every field name.
+
+    "max_treffer" becomes `"title": "Max Treffer"`, which tells a model
+    nothing it cannot read off the property name. Keys *named* `title` inside
+    `properties` are parameter names and are kept — only the keyword is removed.
+    """
+    if not isinstance(schema, dict):
+        return
+
+    schema.pop("title", None)
+
+    for key in _SCHEMA_MAP_KEYS:
+        for value in (schema.get(key) or {}).values():
+            _strip_titles(value)
+    for key in _SCHEMA_LIST_KEYS:
+        for value in schema.get(key) or []:
+            _strip_titles(value)
+    for key in _SCHEMA_CONTAINER_KEYS:
+        _strip_titles(schema.get(key))
+
+
+def _compact_tool_schemas() -> None:
+    """Trim the tool list of text that carries no information for the model.
+
+    The tool list is serialized into every request, so docstring indentation
+    and generated titles are paid for in every turn of every chat.
+    """
+    manager = getattr(mcp, "_tool_manager", None)
+    tools = getattr(manager, "list_tools", None)
+    if tools is None:
+        logger.warning("Tool manager has no list_tools(); leaving tool schemas as generated")
+        return
+
+    for tool in tools():
+        if tool.description:
+            tool.description = inspect.cleandoc(tool.description)
+        _strip_titles(tool.parameters)
+
+
+def _warn_about_unknown_enabled_tools() -> None:
+    """Report allowlist entries that match no tool.
+
+    A typo in PAPER_SEARCH_MCP_ENABLED_TOOLS would otherwise drop a tool the
+    client needs, and the only symptom would be its silent absence.
+    """
+    import difflib
+
+    for name in sorted(_enabled_tools - _offered_tool_names):
+        suggestions = difflib.get_close_matches(name, _offered_tool_names, n=3)
+        hint = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+        logger.warning(
+            "PAPER_SEARCH_MCP_ENABLED_TOOLS names unknown tool %r; it is not "
+            "registered.%s (%d tools available)",
+            name, hint, len(_offered_tool_names),
+        )
+
+
+_compact_tool_schemas()
+
+if _enabled_tools:
+    _warn_about_unknown_enabled_tools()
+
 
 def main():
     import os

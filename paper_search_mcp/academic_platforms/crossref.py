@@ -7,8 +7,32 @@ import random
 from ..paper import Paper
 from .base import PaperSource
 import logging
+import html
+import re
 
 logger = logging.getLogger(__name__)
+
+_JATS_TAG = re.compile(r"</?jats:[^>]*>|</?[a-zA-Z][^>]*>")
+_WHITESPACE = re.compile(r"\s+")
+
+
+def _strip_jats(abstract: str) -> str:
+    """Return the plain text of a CrossRef abstract.
+
+    CrossRef delivers abstracts as JATS XML (`<jats:p>`, `<jats:title>`,
+    `<jats:italic>`, …). The markup costs tokens and gets in the way when the
+    abstract is read for screening. A leading "Abstract" heading is dropped
+    with it, since it carries nothing either.
+    """
+    if not abstract:
+        return ""
+
+    text = _JATS_TAG.sub(" ", abstract)
+    text = html.unescape(text)
+    text = _WHITESPACE.sub(" ", text).strip()
+    if text.lower().startswith("abstract "):
+        text = text[len("abstract "):].lstrip(": ").strip()
+    return text
 
 class CrossRefSearcher(PaperSource):
     """Searcher for CrossRef database papers"""
@@ -17,6 +41,18 @@ class CrossRefSearcher(PaperSource):
     
     # User agent for polite API usage as per CrossRef etiquette
     USER_AGENT = "paper-search-mcp/0.1.3 (https://github.com/Dragonatorul/paper-search-mcp; mailto:paper-search@example.org)"
+
+    # CrossRef registers sub-components of a publication under their own DOI.
+    # They surface in search results as items with a DOI but no citable
+    # content of their own ("Review for ...", "Figure 5: ...").
+    # Report, standard and dataset types are deliberately kept: they are
+    # standalone documents and relevant for engineering literature searches.
+    NON_PAPER_TYPES = frozenset({
+        "peer-review",
+        "peer-review-material",
+        "component",
+        "figure",
+    })
     
     def __init__(self):
         self.session = requests.Session()
@@ -90,13 +126,25 @@ class CrossRefSearcher(PaperSource):
             return []
     
     def _parse_crossref_item(self, item: Dict[str, Any]) -> Optional[Paper]:
-        """Parse a CrossRef API item into a Paper object."""
+        """Parse a CrossRef API item into a Paper object.
+
+        Returns None for sub-component types that are not papers in their own
+        right, so they never reach the result list.
+        """
         try:
+            item_type = item.get('type', '')
+            if item_type in self.NON_PAPER_TYPES:
+                logger.debug(
+                    "Skipping non-paper CrossRef item (type=%s, DOI=%s)",
+                    item_type, item.get('DOI', 'unknown'),
+                )
+                return None
+
             # Extract basic information
             doi = item.get('DOI', '')
             title = self._extract_title(item)
             authors = self._extract_authors(item)
-            abstract = item.get('abstract', '')
+            abstract = _strip_jats(item.get('abstract', ''))
             
             # Extract publication date
             published_date = self._extract_date(item, 'published')
@@ -105,10 +153,9 @@ class CrossRefSearcher(PaperSource):
             if not published_date:
                 published_date = self._extract_date(item, 'created')
             
-            # Default to epoch if no date found
-            if not published_date:
-                published_date = datetime(1970, 1, 1)
-            
+            # No date is left empty on purpose: a placeholder such as
+            # 1970-01-01 would silently corrupt every year filter and sort.
+
             # Extract URLs
             url = item.get('URL', f"https://doi.org/{doi}" if doi else '')
             pdf_url = self._extract_pdf_url(item)
@@ -196,8 +243,13 @@ class CrossRefSearcher(PaperSource):
             return None
             
         parts = date_parts[0]
+        if not parts or parts[0] is None:
+            # No year: the date is unusable. Substituting one (this used to be
+            # 1970) corrupts every year filter and sort downstream.
+            return None
+
         try:
-            year = parts[0] if len(parts) > 0 and parts[0] is not None else 1970
+            year = parts[0]
             month = parts[1] if len(parts) > 1 and parts[1] is not None else 1
             day = parts[2] if len(parts) > 2 and parts[2] is not None else 1
             return datetime(year, month, day)

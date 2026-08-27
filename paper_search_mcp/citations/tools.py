@@ -126,8 +126,7 @@ def register_citation_tools(mcp) -> None:
         Args:
             kennung: DOI oder OpenAlex-Work-ID der Ausgangsarbeit.
             max_treffer: Höchstzahl zurückgegebener Arbeiten (Standard 25, hart begrenzt auf 50).
-            ab_jahr: Nur Arbeiten ab diesem Erscheinungsjahr. Für den aktuellen
-                Forschungsstand sinnvoll, z. B. 2022.
+            ab_jahr: Nur Arbeiten ab diesem Erscheinungsjahr.
             mit_abstract: Abstracts mitliefern (Standard False).
 
         Returns:

@@ -14,8 +14,23 @@ from .base import PaperSource
 logger = logging.getLogger(__name__)
 
 
+class DBLPUnavailable(RuntimeError):
+    """Raised when the dblp API could not be queried at all.
+
+    Distinguishes an unreachable or rate-limited source from a query that
+    legitimately returned no results. `search_papers` reports raised
+    exceptions in its `errors` mapping, so this reaches the client instead
+    of being flattened into a zero-hit result.
+    """
+
+
 class DBLPSearcher(PaperSource):
-    """Searcher for dblp computer science bibliography"""
+    """Searcher for dblp computer science bibliography.
+
+    dblp throttles per client IP: it answers with 429 and a Retry-After
+    header, then with 503, and finally drops connections outright. Requests
+    are paced to stay below that threshold.
+    """
 
     BASE_URL = "https://dblp.org/search/publ/api"
     HTML_SEARCH_URL = "https://dblp.org/search/publ"
@@ -23,12 +38,32 @@ class DBLPSearcher(PaperSource):
     # dblp API returns XML by default
     DEFAULT_FORMAT = "xml"
 
+    MIN_INTERVAL_SEC = 1.5   # pacing between two dblp requests
+    MAX_RETRY_AFTER_SEC = 10  # longer waits are reported as unavailable instead
+
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'paper-search-mcp/1.0 (https://github.com/openags/paper-search-mcp)',
             'Accept': 'application/xml, application/json'
         })
+        self._last_call_at = 0.0  # monotonic seconds; 0.0 = no call yet
+
+    def _pace(self):
+        """Sleep just long enough to keep below the dblp rate limit."""
+        elapsed = time.monotonic() - self._last_call_at
+        if self._last_call_at > 0 and elapsed < self.MIN_INTERVAL_SEC:
+            time.sleep(self.MIN_INTERVAL_SEC - elapsed)
+        self._last_call_at = time.monotonic()
+
+    @classmethod
+    def _retry_delay(cls, response, attempt: int) -> Optional[float]:
+        """Delay before the next attempt, or None if waiting is pointless."""
+        retry_after = response.headers.get('Retry-After', '').strip()
+        if retry_after.isdigit():
+            delay = float(retry_after)
+            return delay if delay <= cls.MAX_RETRY_AFTER_SEC else None
+        return (attempt + 1) * 2.0
 
     def search(self, query: str, max_results: int = 10, **kwargs) -> List[Paper]:
         """
@@ -76,19 +111,52 @@ class DBLPSearcher(PaperSource):
 
             response = None
             for attempt in range(3):
-                response = self.session.get(self.BASE_URL, params=params, timeout=30)
+                self._pace()
+                try:
+                    response = self.session.get(self.BASE_URL, params=params, timeout=30)
+                except requests.RequestException as exc:
+                    # dblp drops connections once a client is blocked
+                    if attempt == 2:
+                        raise DBLPUnavailable(f"dblp API request failed: {exc}") from exc
+                    time.sleep((attempt + 1) * 2.0)
+                    continue
+
                 if response.status_code == 200:
                     break
-                if response.status_code >= 500 and attempt < 2:
-                    time.sleep((attempt + 1) * 1.2)
-                    continue
-                response.raise_for_status()
+
+                # 429 is dblp's rate limit and was previously not retried at all
+                if response.status_code == 429 or response.status_code >= 500:
+                    delay = self._retry_delay(response, attempt)
+                    if delay is not None and attempt < 2:
+                        logger.warning(
+                            "dblp returned %s, retrying in %.1fs", response.status_code, delay
+                        )
+                        time.sleep(delay)
+                        continue
+
+                raise DBLPUnavailable(
+                    f"dblp API returned HTTP {response.status_code}"
+                )
 
             if response is None or response.status_code != 200:
-                raise requests.RequestException("dblp API unavailable")
+                status = response.status_code if response is not None else "no response"
+                raise DBLPUnavailable(f"dblp API unavailable (HTTP {status})")
+
+            # A throttling or error page can be well-formed XML, so the parser
+            # alone cannot tell it apart from an empty result set.
+            content_type = response.headers.get('Content-Type', '')
+            if content_type and 'xml' not in content_type and 'json' not in content_type:
+                raise DBLPUnavailable(
+                    f"dblp answered with Content-Type {content_type!r} instead of XML"
+                )
 
             # Parse XML response
-            root = ET.fromstring(response.content)
+            try:
+                root = ET.fromstring(response.content)
+            except ET.ParseError as exc:
+                # A 200 that is not XML means dblp answered with something else
+                # (error page, throttling notice) — not an empty result set.
+                raise DBLPUnavailable(f"dblp returned an unparseable response: {exc}") from exc
 
             # dblp XML structure: result > hits > hit > info
             hits = root.findall('.//hit')
@@ -109,27 +177,23 @@ class DBLPSearcher(PaperSource):
             if papers:
                 return papers
 
+            # The API answered, it just had nothing parseable. Only here is an
+            # empty result the truth, so the HTML fallback may fill in silently.
             logger.warning("dblp API returned no parseable results, attempting HTML fallback")
             return self._search_html_fallback(query=query, max_results=max_results)
 
+        except DBLPUnavailable:
+            raise
         except requests.RequestException as e:
-            logger.error(f"dblp API request error: {e}")
-            if hasattr(e, 'response') and e.response is not None:
-                logger.error(f"Response status: {e.response.status_code}")
-            return self._search_html_fallback(query=query, max_results=max_results)
-        except ET.ParseError as e:
-            logger.error(f"Failed to parse dblp XML response: {e}")
-            return self._search_html_fallback(query=query, max_results=max_results)
+            raise DBLPUnavailable(f"dblp API request error: {e}") from e
         except Exception as e:
-            logger.error(f"Unexpected error in dblp search: {e}")
-            return self._search_html_fallback(query=query, max_results=max_results)
-
-        return papers
+            raise DBLPUnavailable(f"unexpected error in dblp search: {e}") from e
 
     def _search_html_fallback(self, query: str, max_results: int) -> List[Paper]:
         """Fallback search via dblp HTML endpoint when API is unavailable."""
         papers: List[Paper] = []
         try:
+            self._pace()
             response = self.session.get(
                 self.HTML_SEARCH_URL,
                 params={'q': query},

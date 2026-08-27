@@ -2,7 +2,7 @@
 import unittest
 import os
 import requests
-from paper_search_mcp.academic_platforms.dblp import DBLPSearcher
+from paper_search_mcp.academic_platforms.dblp import DBLPSearcher, DBLPUnavailable
 
 
 def check_api_accessible():
@@ -29,11 +29,23 @@ class TestDBLPSearcher(unittest.TestCase):
     def setUp(self):
         self.searcher = DBLPSearcher()
 
+    def _search(self, *args, **kwargs):
+        """Search, skipping when dblp throttles us.
+
+        dblp rate limits per client IP, and a run of these tests can trip it.
+        A throttled source now raises instead of returning an empty list, and
+        that is a network condition, not a defect under test.
+        """
+        try:
+            return self.searcher.search(*args, **kwargs)
+        except DBLPUnavailable as exc:
+            self.skipTest(f"dblp is rate limiting this run: {exc}")
+
     def test_search_basic(self):
         if not self.api_accessible:
             self.skipTest("dblp API is not accessible")
 
-        papers = self.searcher.search("machine learning", max_results=5)
+        papers = self._search("machine learning", max_results=5)
         print(f"Found {len(papers)} papers from dblp for query 'machine learning':")
 
         for i, paper in enumerate(papers, 1):
@@ -54,7 +66,7 @@ class TestDBLPSearcher(unittest.TestCase):
         if not self.api_accessible:
             self.skipTest("dblp API is not accessible")
 
-        papers = self.searcher.search(
+        papers = self._search(
             "deep learning",
             max_results=3,
             year="2020"
@@ -73,7 +85,7 @@ class TestDBLPSearcher(unittest.TestCase):
         if not self.api_accessible:
             self.skipTest("dblp API is not accessible")
 
-        papers = self.searcher.search(
+        papers = self._search(
             "neural networks",
             max_results=3,
             author="Bengio"
@@ -91,7 +103,7 @@ class TestDBLPSearcher(unittest.TestCase):
         if not self.api_accessible:
             self.skipTest("dblp API is not accessible")
 
-        papers = self.searcher.search(
+        papers = self._search(
             "database",
             max_results=3,
             venue="SIGMOD"
@@ -131,7 +143,7 @@ class TestDBLPSearcher(unittest.TestCase):
         ]
 
         for query in test_queries[:2]:  # Just test first 2 to avoid too many requests
-            papers = self.searcher.search(query, max_results=2)
+            papers = self._search(query, max_results=2)
             print(f"Query '{query}': found {len(papers)} papers")
             if papers:
                 print(f"  First paper: {papers[0].title}")

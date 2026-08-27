@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "paper-search-mcp"
-version = "0.3.4"
+version = "0.5.0"
 authors = [{ name = "P.S Zhang", email = "pengsongzhang96@gmail.com" }]
 description = "A MCP server for searching and downloading academic papers from multiple sources."
 readme = "README.md"
@@ -39,6 +39,11 @@ dependencies = [
     "beautifulsoup4>=4.12.0",
     "lxml>=4.9.0",
     "httpx[socks]>=0.28.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
 ]
 
 [project.urls]
