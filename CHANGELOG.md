@@ -15,6 +15,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > names, parameters, and result formats may still change between minor versions.
 
 ---
+## [0.6.0] – 2026-08-27
+
+Zeitschriftenkennzahlen: ein neues Tool `zeitschrift_profil`, die Zeitschrift als
+strukturiertes Feld an jedem OpenAlex-Treffer, und die Anreicherung als Opt-in.
+
+**Upgrading:** remove the connector in the client and add it again — the tool list
+grew by one entry and clients cache it. Nothing existing changed shape.
+
+**Deliberately not the Journal Impact Factor.** The JIF is Clarivate's, ships only
+through the Journal Citation Reports, has no free API, and the BHT licenses neither
+Web of Science nor JCR; "Impact Factor" is a Clarivate trademark and is not used as
+a label for a value computed elsewhere. What ships is OpenAlex's
+`2yr_mean_citedness` under the name `zit_schnitt_2j` — same concept, different data
+basis, different number.
+
+### Added
+
+- **`zeitschrift_profil(kennung)` returns a journal's profile:** publisher, open
+  access status, DOAJ listing, indexed works, h-index and the mean citations of the
+  works of the last two years. `kennung` takes an ISSN, an OpenAlex source ID, a
+  journal name or an article DOI; the first three resolve unambiguously, a name
+  search is flagged `zuordnung: "unscharf"` so the caller can confirm it against
+  the ISSN. New package `paper_search_mcp/journals/`, wired into `server.py` the
+  way `citations/` and `opac/` already are.
+- **OpenAlex results carry the publishing journal in `extra`:** `journal`,
+  `quelle_id`, `issn_l`, `quelle_typ` and, where they apply, `zeitschrift_oa` and
+  `in_doaj`. All of these were already in the API response — `primary_location`
+  is selected either way — so this costs no additional request. `quelle_typ`
+  earns its place without any metric attached: it separates a journal article
+  from a repository copy and a conference paper.
+- **`search_openalex(mit_kennzahlen=True)`** adds `zit_schnitt_2j` and
+  `zeitschrift_h_index` to each result. Off by default. The distinct journals of
+  a result set are fetched in one batch, not one request per hit, and cached for
+  the life of the process; `/sources` costs the same as `/works`, one credit per
+  request regardless of batch size. A failed enrichment is logged and swallowed —
+  it is supplementary information and must never topple a working result list.
+- A missing metric is **omitted rather than reported as 0**. A zero in a metrics
+  column reads as a statement about the journal but is almost always a gap in the
+  data.
+
+### Changed
+
+- `EXTRA_KEYS` in `paper.py` admits the journal fields. Without that entry the
+  0.5.0 payload diet would have dropped every one of them silently.
+- `citations/openalex_graph.py`: `_get` and `_kurz_id` are now the public
+  `hole_json` and `kurz_id`, so the journals module reuses one HTTP layer — same
+  session, same API key, same error translation — instead of duplicating it.
+- The BHT research skill gains a section on journal metrics: output as a short
+  list rather than a table column, always with the note that the value describes
+  the journal and not the article, and never under the name "Impact Factor".
+  Sorting result lists by the metric is deliberately not implemented — that is
+  the use [DORA](https://sfdora.org/) and CoARA address.
+- `PAPER_SEARCH_MCP_ENABLED_TOOLS` gains `zeitschrift_profil` in the documented
+  BHT set, which grows from seven tools to eight: 2,151 → 2,433 tokens.
+
+### Fixed
+
+- **The OpenAlex adapter no longer discards the journal name.** It read
+  `primary_location` for the landing page and the PDF link and then built `Paper`
+  without any `extra` at all, so `search_openalex` and every `search_papers` run
+  lost the journal of every OpenAlex hit.
+- **`tests/test_semantic.py::test_search_max_results` no longer fails on a rate
+  limit.** It calls the live API but was missing the `skipUnless` guard its
+  neighbours in the same file carry. With that fixed, the file joins the CI list,
+  as does `tests/test_openalex_sources.py`.
+
+---
 ## [0.5.0] – 2026-08-23
 
 This release bundles the packages planned as 0.4.0 through 0.5.0: the tool

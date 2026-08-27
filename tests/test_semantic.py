@@ -105,6 +105,7 @@ class TestSemanticSearcher(unittest.TestCase):
         self.assertIsInstance(results, list)
 
     @unittest.skipUnless(check_semantic_accessible(), "Semantic Scholar not accessible")
+    @unittest.skipUnless(check_semantic_accessible(), "Semantic Scholar not accessible")
     def test_search_max_results(self):
         """Test max_results parameter"""
         results = self.searcher.search("cryptography", max_results=2)
