@@ -4,7 +4,13 @@ from datetime import datetime
 from typing import List, Dict, Optional
 
 # Source-specific fields worth keeping in the serialized output.
-EXTRA_KEYS = ('journal', 'container_title', 'venue', 'publisher', 'isbn', 'open_access')
+EXTRA_KEYS = (
+    'journal', 'container_title', 'venue', 'publisher', 'isbn', 'open_access',
+    # Zeitschrift der Publikation: quelle_id trägt die Anreicherung über
+    # journals/openalex_sources.py, die übrigen beschreiben den Zugangsweg.
+    'quelle_id', 'issn_l', 'quelle_typ', 'zeitschrift_oa', 'in_doaj',
+    'zit_schnitt_2j', 'zeitschrift_h_index',
+)
 MAX_AUTHORS = 3
 MAX_CATEGORIES = 3
 

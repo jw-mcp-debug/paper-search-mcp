@@ -29,6 +29,7 @@ from .academic_platforms.hal import HALSearcher
 from .utils import extract_doi
 
 from .paper import Paper
+from .journals import openalex_sources as quellen
 
 # Initialize MCP server
 mcp = FastMCP("paper_search_server")
@@ -83,6 +84,10 @@ register_opac_tools(mcp)
 # adding citation chaining (OpenAlex graph)
 from paper_search_mcp.citations.tools import register_citation_tools
 register_citation_tools(mcp)
+
+# adding journal metrics (OpenAlex /sources)
+from paper_search_mcp.journals.tools import register_journal_tools
+register_journal_tools(mcp)
 
 logger = logging.getLogger(__name__) 
 
@@ -945,16 +950,24 @@ async def read_crossref_paper(paper_id: str, save_path: str = "./downloads") -> 
 
 
 @mcp.tool()
-async def search_openalex(query: str, max_results: int = 10) -> List[Dict]:
+async def search_openalex(
+    query: str, max_results: int = 10, mit_kennzahlen: bool = False
+) -> List[Dict]:
     """Search academic papers from OpenAlex.
 
     Args:
         query: Search query string (e.g., 'machine learning').
         max_results: Maximum number of papers to return (default: 10).
+        mit_kennzahlen: Add the publishing journal's metrics to each result
+            (citation average over two years, h-index). Off by default because
+            it costs one extra OpenAlex request per 50 distinct journals. Not
+            the Clarivate Journal Impact Factor - see zeitschrift_profil.
     Returns:
         List of paper metadata in dictionary format.
     """
     papers = await async_search(openalex_searcher, query, max_results)
+    if papers and mit_kennzahlen:
+        papers = await asyncio.to_thread(quellen.reichere_dicts_an, papers)
     return papers if papers else []
 
 

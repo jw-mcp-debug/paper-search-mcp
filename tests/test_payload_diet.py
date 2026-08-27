@@ -62,6 +62,20 @@ class TestPaperSerialization(unittest.TestCase):
         data = _paper(extra={"journal": "Nature", "venue": "", "pages": "1-9", "type": "article"}).to_dict()
         self.assertEqual(data["extra"], {"journal": "Nature"})
 
+    def test_journal_metric_keys_survive_the_whitelist(self):
+        """Die Kennzahlen wären ohne Eintrag in EXTRA_KEYS stumm verschwunden."""
+        extra = {
+            "journal": "Automatica", "quelle_id": "S51360982", "issn_l": "0005-1098",
+            "quelle_typ": "journal", "zeitschrift_oa": True, "in_doaj": True,
+            "zit_schnitt_2j": 5.477, "zeitschrift_h_index": 401,
+            "irgendwas_anderes": "wird verworfen",
+        }
+        data = _paper(extra=extra).to_dict()
+        self.assertNotIn("irgendwas_anderes", data["extra"])
+        for key in ("quelle_id", "issn_l", "quelle_typ", "zeitschrift_oa",
+                    "in_doaj", "zit_schnitt_2j", "zeitschrift_h_index"):
+            self.assertIn(key, data["extra"])
+
 
 class TestSearchResponseShape(unittest.TestCase):
     def test_redundant_response_fields_are_gone(self):

@@ -29,6 +29,7 @@ from typing import Dict, List, Optional
 import requests
 
 from ..paper import Paper
+from ..utils import quelle_felder
 
 logger = logging.getLogger(__name__)
 
@@ -74,8 +75,12 @@ def _api_key() -> str:
     ).strip()
 
 
-def _get(url: str, params: Dict) -> Dict:
-    """Ein GET gegen OpenAlex mit einheitlicher Fehlerübersetzung."""
+def hole_json(url: str, params: Dict) -> Dict:
+    """Ein GET gegen OpenAlex mit einheitlicher Fehlerübersetzung.
+
+    Öffentlich, weil ``journals/openalex_sources.py`` dieselbe Session, denselben
+    API-Key und dieselbe Fehlerübersetzung braucht.
+    """
     key = _api_key()
     if key:
         params = {**params, "api_key": key}
@@ -141,8 +146,8 @@ def normalisiere_kennung(kennung: str) -> str:
     )
 
 
-def _kurz_id(openalex_url: str) -> str:
-    """'https://openalex.org/W123' -> 'W123'"""
+def kurz_id(openalex_url: str) -> str:
+    """'https://openalex.org/W123' -> 'W123'; auch für Source-IDs ('S123')."""
     return (openalex_url or "").rstrip("/").rsplit("/", 1)[-1]
 
 
@@ -188,12 +193,12 @@ def _zu_paper(work: Dict) -> Paper:
             veroeffentlicht = None
 
     fundort = work.get("primary_location") or {}
-    quelle = (fundort.get("source") or {}).get("display_name", "")
+    quelle_obj = fundort.get("source") or {}
     oa = work.get("open_access") or {}
     oa_url = oa.get("oa_url") or ""
 
     return Paper(
-        paper_id=_kurz_id(work.get("id", "")),
+        paper_id=kurz_id(work.get("id", "")),
         title=work.get("display_name") or "",
         authors=autoren,
         abstract=_rekonstruiere_abstract(work.get("abstract_inverted_index")),
@@ -203,9 +208,9 @@ def _zu_paper(work: Dict) -> Paper:
         url=doi_url or work.get("id", ""),
         source="openalex",
         citations=work.get("cited_by_count") or 0,
-        references=[_kurz_id(ref) for ref in (work.get("referenced_works") or [])],
+        references=[kurz_id(ref) for ref in (work.get("referenced_works") or [])],
         extra={
-            "journal": quelle,
+            **quelle_felder(quelle_obj),
             "typ": work.get("type") or "",
             "open_access": bool(oa.get("is_oa")),
             "oa_status": oa.get("oa_status") or "",
@@ -220,7 +225,7 @@ def hole_work(kennung: str, mit_abstract: bool = False) -> Dict:
     """
     pfad_id = normalisiere_kennung(kennung)
     select = _SELECT_MIT_GRAPH + (_ABSTRACT_FELD if mit_abstract else "")
-    return _get(f"{OPENALEX_BASE}/{pfad_id}", {"select": select})
+    return hole_json(f"{OPENALEX_BASE}/{pfad_id}", {"select": select})
 
 
 def hydratisiere(
@@ -232,7 +237,7 @@ def hydratisiere(
     Lädt Metadaten zu einer Liste von OpenAlex-Work-IDs.
     Kostet 1 Request je angefangene 50 IDs.
     """
-    ids = [_kurz_id(eintrag) for eintrag in work_ids if eintrag]
+    ids = [kurz_id(eintrag) for eintrag in work_ids if eintrag]
     ids = ids[: min(max_treffer, MAX_TREFFER_HART)]
     if not ids:
         return []
@@ -242,7 +247,7 @@ def hydratisiere(
 
     for start in range(0, len(ids), _BATCH_GROESSE):
         block = ids[start : start + _BATCH_GROESSE]
-        daten = _get(
+        daten = hole_json(
             OPENALEX_BASE,
             {
                 "filter": "openalex_id:" + "|".join(block),
@@ -271,8 +276,8 @@ def zitierende_werke(
     pfad_id = normalisiere_kennung(kennung)
 
     if pfad_id.startswith("doi:"):
-        work = _get(f"{OPENALEX_BASE}/{pfad_id}", {"select": "id,display_name,cited_by_count"})
-        work_id = _kurz_id(work.get("id", ""))
+        work = hole_json(f"{OPENALEX_BASE}/{pfad_id}", {"select": "id,display_name,cited_by_count"})
+        work_id = kurz_id(work.get("id", ""))
         titel = work.get("display_name") or ""
         gesamt_bekannt = work.get("cited_by_count") or 0
     else:
@@ -285,7 +290,7 @@ def zitierende_werke(
         filter_teile.append(f"from_publication_date:{int(ab_jahr)}-01-01")
 
     select = _SELECT_BASIS + (_ABSTRACT_FELD if mit_abstract else "")
-    daten = _get(
+    daten = hole_json(
         OPENALEX_BASE,
         {
             "filter": ",".join(filter_teile),

@@ -28,6 +28,8 @@ Release history and breaking changes are documented in [`CHANGELOG.md`](CHANGELO
 - [Features](#features)
 - [Library Catalog (OPAC / KOBV)](#library-catalog-opac--kobv)
 - [Paper Source Strategy](#paper-source-strategy)
+- [Citation Chaining (Snowballing)](#citation-chaining-snowballing)
+- [Journal Metrics](#journal-metrics)
 - [Platform Capability Matrix](#platform-capability-matrix)
 - [Credential & API Key Requirements](#credential--api-key-requirements)
 - [Known Upstream Limitations](#known-upstream-limitations)
@@ -90,6 +92,9 @@ can retrieve it.
     search, plus per-source `search_*` connectors.
     - **Citation chaining**: `paper_referenzen` (backward), `paper_zitiert_von`
     (forward), `paper_verwandte` (sideways) — snowballing over OpenAlex metadata.
+    - **Journal metrics**: `zeitschrift_profil` — publisher, access route and
+    OpenAlex citation statistics for a journal. Deliberately not the Clarivate
+    Journal Impact Factor; see [Journal Metrics](#journal-metrics).
 - **BHT holdings filter**: catalog searches are filtered to the BHT stock via
   ISIL `DE-B768` (Bib-1 attribute 1044), with an option to widen to the full KOBV
   union catalog for interlibrary loan.
@@ -167,6 +172,42 @@ response; set it on for term harvesting (pearl growing).
 > `paper_referenzen` costs two requests per call, the others one to two. Without a
 > key, OpenAlex allows ~100 credits/day and then returns HTTP 409.
 
+## Journal Metrics
+
+`zeitschrift_profil(kennung)` returns the profile of a publishing journal: publisher,
+open-access status, DOAJ listing, number of indexed works, h-index, and the mean
+citations of the works of the last two years. It accepts an ISSN (`0005-1098`), an
+OpenAlex source ID (`S51360982`), a journal name, or the DOI of an article — the
+first three resolve unambiguously, a name search is reported as
+`zuordnung: "unscharf"` and should be confirmed against the ISSN.
+
+Search results from OpenAlex now also carry the journal in `extra`: `journal`,
+`quelle_id`, `issn_l`, `quelle_typ` (journal / repository / conference) and, where
+they apply, `zeitschrift_oa` and `in_doaj`. `quelle_typ` is useful on its own — it
+separates a journal article from a repository copy without involving any metric at
+all. `search_openalex(mit_kennzahlen=True)` adds `zit_schnitt_2j` and
+`zeitschrift_h_index` to each result; it is off by default and costs one extra
+request per 50 distinct journals.
+
+> **This is not the Journal Impact Factor.** The JIF is Clarivate's, is delivered
+> only through the Journal Citation Reports, has no free API, and the BHT licenses
+> neither Web of Science nor JCR. "Impact Factor" is also a Clarivate trademark and
+> must not be used as a label for a value computed elsewhere. What this server
+> returns is OpenAlex's `2yr_mean_citedness` — the same concept on a different data
+> basis, in the same order of magnitude, but not the same number. It is named
+> `zit_schnitt_2j` throughout, and the term "Impact Factor" appears nowhere in the
+> code, the docstrings or the skill output.
+
+> **What the number can and cannot carry.** It describes the journal, not the
+> article. Citation distributions within a journal are strongly skewed and most
+> articles fall well below the mean, so the value does not support a judgement about
+> an individual paper. Sorting result lists by it is deliberately not implemented —
+> that is precisely the use [DORA](https://sfdora.org/) and CoARA address.
+
+> **Credits.** `/sources` costs the same as `/works`: one credit per request
+> regardless of how many IDs a batch carries, so 50 journals cost one credit.
+> Journals are cached for the lifetime of the process.
+
 ## Platform Capability Matrix
 
 Reflects verified live-integration results. Columns show the highest capability level
@@ -235,7 +276,7 @@ of 56 tools costs about 14,600 tokens per request; the seven the BHT research sk
 actually calls cost about 2,900:
 
 ```
-PAPER_SEARCH_MCP_ENABLED_TOOLS=opac_suche,opac_autor_suche,opac_isbn_suche,kobv_verbund_suche,search_papers,paper_referenzen,paper_zitiert_von
+PAPER_SEARCH_MCP_ENABLED_TOOLS=opac_suche,opac_autor_suche,opac_isbn_suche,kobv_verbund_suche,search_papers,paper_referenzen,paper_zitiert_von,zeitschrift_profil
 ```
 
 Search coverage is untouched: `search_papers` keeps querying every source in
@@ -453,3 +494,9 @@ It is a fork of [openags/paper-search-mcp](https://github.com/openags/paper-sear
 (MIT), extended with BHT/KOBV catalog search via Z39.50 and adapted for a single
 remote-connector deployment. The optional Sci-Hub workflow from the upstream project
 has been removed.
+
+Journal and work metadata comes from [OpenAlex](https://openalex.org/), whose data is
+released into the public domain under CC0. `zit_schnitt_2j` is OpenAlex's
+`2yr_mean_citedness`. "Impact Factor" and "Journal Citation Reports" are trademarks
+of Clarivate; neither product is used, reproduced or approximated here under those
+names.

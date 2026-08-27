@@ -5,7 +5,7 @@ import requests
 import logging
 from ..paper import Paper
 from .base import PaperSource
-from ..utils import extract_doi
+from ..utils import extract_doi, quelle_felder
 
 logger = logging.getLogger(__name__)
 
@@ -136,9 +136,11 @@ class OpenAlexSearcher(PaperSource):
                 pdf_url = ""
 
                 primary_location = item.get("primary_location")
+                source_obj = {}
                 if primary_location:
                     url = primary_location.get("landing_page_url", "")
                     pdf_url = primary_location.get("pdf_url", "")
+                    source_obj = primary_location.get("source") or {}
 
                 if not url:
                     url = item.get("id", "")
@@ -177,6 +179,12 @@ class OpenAlexSearcher(PaperSource):
                         categories=concepts[:5],  # Keep top 5 concepts to reduce size
                         doi=doi,
                         citations=item.get("cited_by_count", 0),
+                        # Ohne das ging der Zeitschriftenname bei jeder Suche
+                        # verloren; die Felder stecken schon in der Antwort.
+                        extra={
+                            **quelle_felder(source_obj),
+                            "open_access": bool(open_access.get("is_oa")),
+                        },
                     )
                 )
 

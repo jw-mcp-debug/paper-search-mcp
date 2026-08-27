@@ -46,5 +46,5 @@ services:
       # To measure the tool allowlist, set PAPER_SEARCH_MCP_ENABLED_TOOLS in the
       # dashboard for this service only:
       #   opac_suche,opac_autor_suche,opac_isbn_suche,kobv_verbund_suche,
-      #   search_papers,paper_referenzen,paper_zitiert_von
+      #   search_papers,paper_referenzen,paper_zitiert_von,zeitschrift_profil
       # Leave it unset for a like-for-like comparison against main.
