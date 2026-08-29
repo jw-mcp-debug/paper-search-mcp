@@ -53,9 +53,16 @@ class TestToolSchemaDiet(unittest.TestCase):
                 f"{tool.name}: {json.dumps(tool.inputSchema, ensure_ascii=False)}",
             )
 
-    def test_a_parameter_named_title_survives(self):
-        tool = next(t for t in self.tools if t.name == "download_with_fallback")
-        self.assertIn("title", tool.inputSchema["properties"])
+    def test_no_retrieval_tools_are_registered(self):
+        """Retrieval is not this server's job, and it is the largest block.
+
+        The agent's system prompt forbids download/read tools, SKILL.md lists
+        them under "do not use", and they were 42% of the tool list — paid for
+        in every request. They are gone; this keeps them gone.
+        """
+        retrieval = [t.name for t in self.tools
+                     if t.name.startswith(("download_", "read_"))]
+        self.assertEqual(retrieval, [])
 
     def test_opac_tools_take_flat_arguments(self):
         for name in ("opac_suche", "opac_isbn_suche", "opac_autor_suche"):

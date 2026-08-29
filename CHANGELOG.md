@@ -63,8 +63,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pydantic die genauere.
 - Tool-Liste 10.065 → 10.179 Tokens (+114) für die erweiterten Beschreibungen.
 
-**Upgrading:** remove the connector in the client and add it again — the
-parameter descriptions changed and clients cache the tool list.
+### Removed
+
+- **Die 29 Beschaffungswerkzeuge (`download_*`, `read_*`) sind entfernt.** Sie
+  waren der größte Block der Tool-Liste — 15.031 Zeichen, 42 %, mehr als die acht
+  Werkzeuge, die eine Recherche tatsächlich benutzt — und wurden in jeder
+  einzelnen Anfrage mitgeschickt, obwohl sie an drei Stellen ausgeschlossen
+  waren: im System-Prompt des Rechercheagenten, in SKILL.md und in der dafür
+  vorgesehenen Allowlist. Ein Ausschluss, den man an drei Stellen wiederholen
+  muss, ist keine Funktion mehr. Die Searcher-Klassen in `academic_platforms/`
+  bleiben unberührt, `search_papers` erreicht weiterhin jede Quelle. Mit
+  entfallen sind die nur von ihnen benutzten Helfer `_download_from_url`,
+  `_try_repository_fallback`, `_safe_filename` und `tests/test_fallback.py`;
+  `server.py` schrumpft von 1.526 auf 943 Zeilen.
+- Die Tool-Liste fällt damit von **13.499 auf rund 7.900 Tokens** je Anfrage.
+  Diese Zahlen sind an der Kontextanzeige einer laufenden LibreChat-Sitzung
+  abgelesen, nicht geschätzt: die im Repo verwendete Näherung von 3,5 Zeichen je
+  Token unterschätzt die reale Dichte von 2,61 um 34 %. Die früheren Diätrunden
+  haben vor allem gut komprimierbare Zeichen entfernt (Einrückung, wiederholte
+  Schlüssel, `{"result": …}`-Wrapper) — 31 % der Zeichen, aber nur 10 % der
+  Tokens. Übrig blieb deutscher Fließtext, der je Zeichen am teuersten ist.
+
+**Upgrading:** remove the connector in the client and add it again — the tool
+set and the parameter descriptions changed, and clients cache the tool list.
 
 ---
 ## [0.6.0] – 2026-08-27

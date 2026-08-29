@@ -43,9 +43,8 @@ auf ISIL DE-B768) und die Paper-Suche über mehrere Datenbanken.
   OpenAIRE-Treffer wird nur genannt, wenn der DOI zum Titel passt – im Zweifel
   über eine zweite Quelle gegenprüfen. (Upstream-Problem, nicht im Server behebbar.)
 - **Keine Volltextbeschaffung.** Dieser Skill *findet* Literatur und liefert Links
-  zur Quelle. Er ruft **keine** Download-/Read-Werkzeuge auf (kein
-  `download_with_fallback`, kein `download_*`, kein `read_*`). Den Volltext erhält
-  die Person über die legitimen Wege der Bibliothek (siehe Schlusshinweis).
+  zur Quelle; der Server stellt dafür auch keine Werkzeuge bereit. Den Volltext
+  erhält die Person über die legitimen Wege der Bibliothek (siehe Schlusshinweis).
 
 ## Ablauf
 
@@ -296,8 +295,6 @@ Zeitschrift:
 - `zeitschrift_profil(kennung)` – Kennzahlen und Zugangsstatus einer Zeitschrift.
   `kennung` nimmt ISSN, Zeitschriftennamen, OpenAlex-Source-ID oder Aufsatz-DOI.
   Nur auf Nachfrage aufrufen, nicht routinemäßig je Treffer.
-
-Nicht verwenden (Beschaffung): `download_with_fallback`, `download_*`, `read_*`.
 
 ## Zeitschriftenkennzahlen (nur auf Nachfrage)
 
