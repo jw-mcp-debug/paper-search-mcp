@@ -15,6 +15,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > names, parameters, and result formats may still change between minor versions.
 
 ---
+## [Unreleased]
+
+### Added
+
+- **Die Katalog-Tools verstehen eine Blocksuche.** `;` trennt Konzepte (die
+  UND-verknüpft werden), ` OR ` deren Synonyme, Anführungszeichen erzwingen
+  eine Phrase: `KI OR "Künstliche Intelligenz"; Bildung OR Unterricht`. Der
+  KOBV-Katalog sortiert nicht nach Relevanz und liest jedes Wort als harten
+  UND-Filter — wer drei Konzepte in eine Anfrage schreibt, bekommt regelmäßig
+  null Treffer, obwohl der Bestand zum Thema etwas hergibt. In einer echten
+  Recherchesitzung liefen 9 von 24 Kataloganfragen leer, sechs davon
+  vermeidbar: `Deskilling Künstliche Intelligenz` (0 Treffer) ergibt als
+  `Deskilling OR Dequalifizierung; Bildung OR Hochschule` 12 Treffer,
+  `KI Künstliche Intelligenz Bildung` (0) im BHT-Bestand 28. Eingaben ohne
+  `;` und ` OR ` verhalten sich unverändert.
+
+### Changed
+
+- **Eine Schlagwortsuche ohne Treffer sucht zusätzlich im Freitextfeld** und
+  weist das im Ergebnis aus. Ein Begriff, der nicht als GND-Schlagwort
+  angesetzt ist, ergab bisher null Treffer, ohne dass erkennbar war warum:
+  `Deskilling` findet als Schlagwort nichts, im Freitext 115 Titel. Der
+  Rückfall greift nur bei null Treffern — die Präzision einer erfolgreichen
+  Schlagwortsuche bleibt unangetastet, und der Wechsel steht im Ergebnistext,
+  statt still zu geschehen.
+- **`*` und `?` werden als wirkungslos gemeldet.** Der KOBV-Server beherrscht
+  keine Trunkierung (Bib-1-Attribut 5 antwortet „unsupported search"), lehnt
+  Platzhalter aber nicht ab, sondern liest sie als Wortbestandteil: `Bildung*`
+  liefert exakt dieselbe Treffermenge wie `Bildung`. Das sah bisher wie eine
+  funktionierende Trunkierung aus.
+- **Das Nullresultat erklärt die UND-Verknüpfung**, statt vier allgemeine
+  Tipps zu geben, und `kobv_verbund_suche` beschreibt sein Mehrwort-Verhalten
+  jetzt so wie `opac_suche` — dort fehlte der Hinweis ganz, was einen Teil der
+  leeren Verbundsuchen erklärt.
+- Tool-Liste 10.065 → 10.179 Tokens (+114) für die erweiterten Beschreibungen.
+
+**Upgrading:** remove the connector in the client and add it again — the
+parameter descriptions changed and clients cache the tool list.
+
+---
 ## [0.6.0] – 2026-08-27
 
 Zeitschriftenkennzahlen: ein neues Tool `zeitschrift_profil`, die Zeitschrift als

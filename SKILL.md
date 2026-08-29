@@ -102,11 +102,27 @@ Tabelle (Stufe 0), vorrangig aus der deutschen Spalte.
   scannen (12–15) und die **einschlägigsten selbst auswählen**, statt die ersten
   fünf zu übernehmen. Auswahlkriterien: Passung zum Thema (Titel + Schlagwörter),
   aktuelle Auflagen, Lehrbuch/Handbuch vor enger Monografie.
-- **Fallback `"any"`:** Liefert die Schlagwortsuche zu wenig (sehr neues oder
-  spezielles Thema ohne etablierte GND-Schlagwörter), mit `suchtyp="any"`
-  nachfassen. `suchtyp="title"`, wenn ein bestimmter Titel gesucht wird.
-- Deutsche Begriffe für deutschsprachige Themen; einzelne, zentrale Begriffe
-  statt langer Mehrwortphrasen.
+- **Die Suchbegriffstabelle als Blocksuche stellen:** Der Katalog sortiert
+  **nicht** nach Relevanz und verknüpft alle Wörter mit UND — jedes zusätzliche
+  Wort ist ein harter Filter, kein Ranking-Signal. Die Blöcke aus Stufe 0
+  deshalb als Blocksuche übergeben: `;` trennt Konzepte, ` OR ` deren Synonyme,
+  Anführungszeichen erzwingen eine Phrase:
+
+      KI OR "Künstliche Intelligenz"; Bildung OR Unterricht OR Hochschule
+
+  **Höchstens zwei Konzepte pro Anfrage.** Drei sind für einen Katalog fast
+  immer zu eng — er indexiert Titel und Schlagwörter, keine Volltexte.
+  Synonyme dagegen kosten nichts: sie vergrößern die Treffermenge, statt sie
+  zu verkleinern. Deutsche und englische Fassung eines Konzepts gehören in
+  denselben Block.
+- **Keine Trunkierung:** `*` und `?` wirken nicht — der Katalog liest sie als
+  Wortbestandteil, `Bildung*` findet also genau dasselbe wie `Bildung`.
+  Wortformen per ` OR ` ausschreiben (`Bildung OR Bildungsforschung`).
+- **Fallback `"any"`:** Findet die Schlagwortsuche nichts, sucht das Tool von
+  sich aus zusätzlich im Freitext und weist das im Ergebnis aus — ein Begriff
+  ohne GND-Ansetzung (z. B. „Deskilling") führt damit nicht mehr in eine
+  Nullrunde. Für ein bewusst breiteres Netz weiterhin `suchtyp="any"`,
+  `suchtyp="title"` für einen bestimmten Titel.
 - `opac_autor_suche` bei bekannter Person, `opac_isbn_suche` bei bekannter ISBN.
 - Nichts im BHT-Bestand → `kobv_verbund_suche` (gesamter Verbund, Fernleihe) und
   klar als Fernleihe kennzeichnen.
@@ -200,6 +216,8 @@ Jeweils 2–3 Vorschläge pro Richtung, mit dem konkreten Suchbegriff bzw. Toola
 **Erweitern** (mehr/breitere Treffer), wenn die Ausbeute dünn war:
 - Nachbarbegriffe aus der Tabelle (Stufe 0), die noch nicht gesucht wurden
 - Oberbegriff statt engem Begriff; `suchtyp="any"` statt `"subject"`
+- Ein Konzept ganz weglassen (aus zwei Blöcken einer) oder den vorhandenen
+  Blöcken weitere Synonyme per ` OR ` hinzufügen
 - `nur_bht_bestand=false` → KOBV-Verbund (Fernleihe) für Titel außerhalb der BHT
 - Englische Begriffe für die Paper-Stufe, weitere Quellen fachabhängig zuschalten
 
@@ -255,6 +273,7 @@ Kurz und sachlich, passend zum Treffertyp:
 
 Katalog:
 - `opac_suche(suchbegriff, suchtyp="subject"|"any"|"title"|"author", max_treffer, nur_bht_bestand=true)`
+  — `suchbegriff` erlaubt die Blocksuche: `Konzept1 OR Synonym; Konzept2 OR Synonym`
 - `opac_autor_suche(autor, max_treffer, nur_bht_bestand=true)`
 - `opac_isbn_suche(isbn)`
 - `kobv_verbund_suche(suchbegriff, suchtyp="any", max_treffer)`
