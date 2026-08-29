@@ -80,6 +80,21 @@ basis, different number.
   limit.** It calls the live API but was missing the `skipUnless` guard its
   neighbours in the same file carry. With that fixed, the file joins the CI list,
   as does `tests/test_openalex_sources.py`.
+- **`tests/test_server.py` no longer asserts a source list that does not exist.**
+  `test_all_sources_include_new_platforms` and `test_parse_sources_with_new_platforms`
+  still expected `citeseerx` and `ssrn` in `ALL_SOURCES`; both were removed in
+  0.2.0 and the two tests have failed ever since. **SSRN is not part of the
+  aggregated search** and `search_papers` cannot reach it — a re-check on
+  2026-08-27 confirms why: the documented result page
+  (`www.ssrn.com/index.cfm/en/rps-stage1-results/`) answers 404, and the
+  alternate (`papers.ssrn.com/sol3/results.cfm`) answers 403 with a Cloudflare
+  challenge, so `SSRNSearcher.search()` returns zero hits for every query.
+  `academic_platforms/ssrn.py` stays in the tree and keeps its unit tests — those
+  parse recorded HTML and do not touch the network — and the 0.5.0 serialization
+  fix remains correct; neither makes the live endpoint reachable. The
+  assertions now match the actual list, and a new
+  `test_retired_platforms_stay_out_of_all_sources` pins the exclusion so a
+  future re-add has to come with a connector that works.
 
 ---
 ## [0.5.0] – 2026-08-23
