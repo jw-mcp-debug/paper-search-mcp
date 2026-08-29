@@ -49,6 +49,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Tipps zu geben, und `kobv_verbund_suche` beschreibt sein Mehrwort-Verhalten
   jetzt so wie `opac_suche` — dort fehlte der Hinweis ganz, was einen Teil der
   leeren Verbundsuchen erklärt.
+- **Argumente, die zu keinem Parameter passen, werden erklärt statt vermisst.**
+  Ein Client mit zwischengespeicherter Tool-Liste sendet nach einer
+  Parameteränderung weiter die alte Form. Pydantic meldete daraufhin das
+  *fehlende* Feld („suchbegriff Field required"), während der Aufrufende auf
+  ein `suchbegriff` blickte, das er sehr wohl übergeben hatte — nur eine Ebene
+  tiefer in einem Wrapper. Diese Antwort kostete eine echte Sitzung sechs
+  identische Wiederholungen, bevor sie das Tool aufgab und aus dem
+  Ersatzwerkzeug eine falsche Aussage über den BHT-Bestand ableitete. Die
+  Meldung nennt jetzt die tatsächlichen Parameter und beide Auswege: flach
+  übergeben, und den Connector im Client neu laden. Sie greift nur, wenn
+  *kein* übergebenes Argument passt — sobald eines passt, ist die Meldung von
+  pydantic die genauere.
 - Tool-Liste 10.065 → 10.179 Tokens (+114) für die erweiterten Beschreibungen.
 
 **Upgrading:** remove the connector in the client and add it again — the

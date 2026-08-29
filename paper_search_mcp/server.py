@@ -28,6 +28,8 @@ from .academic_platforms.base_search import BASESearcher
 from .academic_platforms.hal import HALSearcher
 from .utils import extract_doi
 
+from mcp.server.fastmcp.exceptions import ToolError
+
 from .paper import Paper
 from .journals import openalex_sources as quellen
 
@@ -1428,6 +1430,63 @@ def _compact_tool_schemas() -> None:
         _strip_titles(tool.parameters)
 
 
+def _argument_mismatch(name: str, arguments: Any) -> Optional[str]:
+    """Describe arguments that fit no parameter of the tool at all.
+
+    A client caches the tool list, so after a release that renames or
+    restructures parameters it keeps sending the old shape. Pydantic then
+    reports the field it is *missing* ("suchbegriff Field required") while the
+    caller is looking at a `suchbegriff` it did pass, one level down in a
+    wrapper object. That answer is unactionable: one real session spent six
+    identical retries on it before abandoning the tool and drawing a wrong
+    conclusion about the library's holdings from the tool it fell back to.
+
+    Only a call in which *nothing* matches is reported here — as soon as one
+    argument fits, pydantic's own message is the more precise one.
+    """
+    if not isinstance(arguments, dict) or not arguments:
+        return None
+
+    manager = getattr(mcp, "_tool_manager", None)
+    try:
+        tool = manager.get_tool(name) if manager else None
+    except Exception:
+        return None
+    expected = set((getattr(tool, "parameters", None) or {}).get("properties", {}))
+    if not expected:
+        return None
+
+    passed = set(arguments)
+    if passed & expected:
+        return None
+
+    return (
+        f"{name} has no parameter named {', '.join(sorted(passed))}. "
+        f"It takes: {', '.join(sorted(expected))}. Pass them flat, not wrapped "
+        f"in an object. If this client cached an older tool list, remove the "
+        f"connector and add it again."
+    )
+
+
+def _install_argument_mismatch_hint() -> None:
+    """Answer a schema mismatch with something the caller can act on."""
+    manager = getattr(mcp, "_tool_manager", None)
+    if manager is None or not callable(getattr(manager, "call_tool", None)):
+        logger.warning(
+            "Tool manager has no call_tool(); argument mismatches stay unexplained")
+        return
+
+    original = manager.call_tool
+
+    async def call_tool(name, arguments, *args, **kwargs):
+        hint = _argument_mismatch(name, arguments)
+        if hint:
+            raise ToolError(hint)
+        return await original(name, arguments, *args, **kwargs)
+
+    manager.call_tool = call_tool
+
+
 def _warn_about_unknown_enabled_tools() -> None:
     """Report allowlist entries that match no tool.
 
@@ -1447,6 +1506,7 @@ def _warn_about_unknown_enabled_tools() -> None:
 
 
 _compact_tool_schemas()
+_install_argument_mismatch_hint()
 
 if _enabled_tools:
     _warn_about_unknown_enabled_tools()
