@@ -218,7 +218,7 @@ class UnpaywallSearcher(PaperSource):
     def download_pdf(self, paper_id: str, save_path: str = "./downloads") -> str:
         raise NotImplementedError(
             "Unpaywall does not host PDFs directly. "
-            "Use the returned pdf_url/url with download_with_fallback or source-native download tools."
+            "Use the returned pdf_url/url directly; this server exposes no download tools."
         )
 
     def read_paper(self, paper_id: str, save_path: str = "./downloads") -> str:

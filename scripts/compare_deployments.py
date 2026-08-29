@@ -22,10 +22,18 @@ from typing import Any, Dict
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
-# Calibrated against a real LibreChat session: 51,207 characters of tool list
-# were billed as 14,956 tokens, i.e. ~3.42 characters per token including client
-# framing. 3.5 is the conservative rounding of that.
-CHARS_PER_TOKEN = 3.5
+# Calibrated against the context display of a live LibreChat session on
+# 2026-08-29: a 35,226-character tool list was billed as 13,499 tokens, i.e. 2.61
+# characters per token including client framing. 2.6 rounds that in the direction
+# that does not understate the cost.
+#
+# The earlier calibration (3.42, measured before the tool schemas were trimmed)
+# no longer holds, and the reason matters: trimming removed indentation, repeated
+# keys and outputSchema wrappers — the text a tokenizer compresses best — and
+# left German prose, which it compresses worst. 31% of the characters went, but
+# only 10% of the tokens. Re-measure after any change that shifts that mix
+# rather than carrying this number forward on faith.
+CHARS_PER_TOKEN = 2.6
 
 DEFAULT_QUERY = "cross-laminated timber fire resistance"
 DEFAULT_SOURCES = "crossref,arxiv"

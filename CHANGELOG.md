@@ -15,7 +15,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > names, parameters, and result formats may still change between minor versions.
 
 ---
-## [Unreleased]
+## [0.7.0] – 2026-08-29
+
+Die Katalogsuche versteht Konzepte und ihre Synonyme in einer Anfrage, die
+Beschaffungswerkzeuge sind entfernt, und ein fehlgeleiteter Aufruf bekommt eine
+Antwort, mit der sich etwas anfangen lässt. Die Tool-Liste kostet damit rund
+7.900 statt 13.499 Tokens in **jeder** Anfrage.
+
+**Breaking:** Die 29 Werkzeuge `download_*` und `read_*` gibt es nicht mehr. Ein
+Client, der Volltexte über diesen Server bezieht, bleibt auf 0.6.0 — die Suche
+ist nicht betroffen.
+
+**Upgrading:** remove the connector in the client and add it again — the tool set
+and the parameter descriptions changed, and clients cache the tool list.
 
 ### Added
 
@@ -61,6 +73,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   übergeben, und den Connector im Client neu laden. Sie greift nur, wenn
   *kein* übergebenes Argument passt — sobald eines passt, ist die Meldung von
   pydantic die genauere.
+- **`CHARS_PER_TOKEN` in `scripts/compare_deployments.py`: 3,5 → 2,6.** Die alte
+  Zahl stammt aus einer Messung von vor den Diätrunden und hat die Tool-Liste
+  seither um 34 % zu billig gerechnet — der Changelog zu 0.5.0 nennt 9.582 Tokens,
+  wo in Wirklichkeit 13.499 anfielen. Der Kommentar an der Konstante sagt jetzt,
+  woher der Wert stammt und wann er neu zu messen ist, statt ihn auf Treu und
+  Glauben weiterzureichen.
 - Tool-Liste 10.065 → 10.179 Tokens (+114) für die erweiterten Beschreibungen.
 
 ### Removed
@@ -83,9 +101,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   haben vor allem gut komprimierbare Zeichen entfernt (Einrückung, wiederholte
   Schlüssel, `{"result": …}`-Wrapper) — 31 % der Zeichen, aber nur 10 % der
   Tokens. Übrig blieb deutscher Fließtext, der je Zeichen am teuersten ist.
-
-**Upgrading:** remove the connector in the client and add it again — the tool
-set and the parameter descriptions changed, and clients cache the tool list.
 
 ---
 ## [0.6.0] – 2026-08-27

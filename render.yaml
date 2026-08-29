@@ -31,7 +31,7 @@ services:
   - type: web
     name: paper-search-mcp-candidate
     runtime: python
-    branch: work/v0.4.0
+    branch: work/v0.7.0-opac-blocksuche
     region: frankfurt
     plan: free
     buildCommand: bash setup.sh
@@ -44,7 +44,7 @@ services:
       - key: PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY
         sync: false
       # To measure the tool allowlist, set PAPER_SEARCH_MCP_ENABLED_TOOLS in the
-      # dashboard for this service only:
+      # dashboard for this service only (the full list is 28 tools since 0.7.0):
       #   opac_suche,opac_autor_suche,opac_isbn_suche,kobv_verbund_suche,
       #   search_papers,paper_referenzen,paper_zitiert_von,zeitschrift_profil
       # Leave it unset for a like-for-like comparison against main.
