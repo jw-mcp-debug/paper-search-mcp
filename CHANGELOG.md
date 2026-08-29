@@ -81,6 +81,16 @@ and the parameter descriptions changed, and clients cache the tool list.
   Glauben weiterzureichen.
 - Tool-Liste 10.065 → 10.179 Tokens (+114) für die erweiterten Beschreibungen.
 
+### Fixed
+
+- **Die Semantic-Scholar-Netztests überspringen sich, wenn der Lauf gedrosselt
+  wird.** Sie fragen die Live-API ohne Schlüssel ab, und ein CI-Runner teilt
+  seine IP mit jedem anderen Job auf dem Host: Die Erreichbarkeitsprüfung beim
+  Import kann durchgehen, während die Anfrage Sekunden später 429 bekommt. Genau
+  daran ist der erste 0.7.0-Build gescheitert. Dieselbe Behandlung, die dblp in
+  `9ac2084` bekommen hat — eine Drosselung ist eine Netzbedingung, kein Defekt
+  im Prüfgegenstand.
+
 ### Removed
 
 - **Die 29 Beschaffungswerkzeuge (`download_*`, `read_*`) sind entfernt.** Sie
