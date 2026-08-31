@@ -941,7 +941,7 @@ wheels = [
 
 [[package]]
 name = "paper-search-mcp"
-version = "0.5.0"
+version = "0.7.0"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },

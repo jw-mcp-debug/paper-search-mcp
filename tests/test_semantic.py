@@ -5,7 +5,10 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
-from paper_search_mcp.academic_platforms.semantic import SemanticSearcher
+from paper_search_mcp.academic_platforms.semantic import (
+    SemanticSearcher,
+    SemanticScholarUnavailable,
+)
 
 
 def check_semantic_accessible():
@@ -28,6 +31,20 @@ class TestSemanticSearcher(unittest.TestCase):
 
     def setUp(self):
         self.searcher = SemanticSearcher()
+
+    def _search(self, *args, **kwargs):
+        """Search, skipping when Semantic Scholar throttles us.
+
+        Semantic Scholar rate limits unauthenticated clients per IP, and a CI
+        runner shares that IP with every other job on the host — the accessibility
+        check at import time can pass and the request seconds later still come
+        back 429. A throttled source raises, and that is a network condition,
+        not a defect under test.
+        """
+        try:
+            return self.searcher.search(*args, **kwargs)
+        except SemanticScholarUnavailable as exc:
+            self.skipTest(f"Semantic Scholar is rate limiting this run: {exc}")
 
     def test_download_pdf_saves_file_when_pdf_url_available(self):
         paper = SimpleNamespace(pdf_url="https://example.com/paper.pdf")
@@ -84,7 +101,7 @@ class TestSemanticSearcher(unittest.TestCase):
     @unittest.skipUnless(check_semantic_accessible(), "Semantic Scholar not accessible")
     def test_search_basic(self):
         """Test basic search functionality"""
-        results = self.searcher.search("secret sharing", max_results=3)
+        results = self._search("secret sharing", max_results=3)
 
         self.assertIsInstance(results, list)
         self.assertLessEqual(len(results), 3)
@@ -101,14 +118,14 @@ class TestSemanticSearcher(unittest.TestCase):
     @unittest.skipUnless(check_semantic_accessible(), "Semantic Scholar not accessible")
     def test_search_empty_query(self):
         """Test search with empty query"""
-        results = self.searcher.search("", max_results=3)
+        results = self._search("", max_results=3)
         self.assertIsInstance(results, list)
 
     @unittest.skipUnless(check_semantic_accessible(), "Semantic Scholar not accessible")
     @unittest.skipUnless(check_semantic_accessible(), "Semantic Scholar not accessible")
     def test_search_max_results(self):
         """Test max_results parameter"""
-        results = self.searcher.search("cryptography", max_results=2)
+        results = self._search("cryptography", max_results=2)
         self.assertLessEqual(len(results), 2)
 
     @unittest.skipUnless(check_semantic_accessible(), "Semantic Scholar not accessible")
@@ -260,7 +277,7 @@ class TestSemanticSearcher(unittest.TestCase):
         """Test search functionality with fetch_details parameter"""
         # Test with fetch_details=True (detailed information)
         print("\nTesting search with fetch_details=True")
-        detailed_papers = self.searcher.search(
+        detailed_papers = self._search(
             "cryptography", max_results=2, fetch_details=True
         )
 
@@ -289,7 +306,7 @@ class TestSemanticSearcher(unittest.TestCase):
 
         # Test with fetch_details=False (compact information)
         print("\nTesting search with fetch_details=False")
-        compact_papers = self.searcher.search(
+        compact_papers = self._search(
             "cryptography", max_results=2, fetch_details=False
         )
 
@@ -316,7 +333,7 @@ class TestSemanticSearcher(unittest.TestCase):
         # Test detailed search time
         print("\nTesting detailed search performance...")
         start_time = time.time()
-        compact_papers = self.searcher.search(
+        compact_papers = self._search(
             query, max_results=max_results
         )
         compact_time = time.time() - start_time

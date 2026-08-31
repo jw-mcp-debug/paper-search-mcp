@@ -98,14 +98,32 @@ def _formatiere_ergebnisse(daten: dict, suchbegriff: str,
     gesamt = daten.get("treffer_gesamt", 0)
     treffer_liste = daten.get("treffer", [])
 
+    # Trunkierung kann der KOBV-Server nicht, ignoriert * und ? aber stumm –
+    # der Aufrufende muss erfahren, dass sein Platzhalter wirkungslos war.
+    platzhalter_hinweis = (
+        "⚠️ `*`/`?` wirken hier **nicht** als Platzhalter – der Katalog kann "
+        "keine Trunkierung und hat sie als Wortbestandteil gelesen. "
+        "Wortformen stattdessen per ` OR ` ausschreiben.\n\n"
+        if daten.get("platzhalter") else ""
+    )
+    fallback_hinweis = (
+        "ℹ️ Als GND-Schlagwort nicht angesetzt – gesucht wurde deshalb "
+        "zusätzlich im Freitext. Die Treffer sind entsprechend weniger "
+        "trennscharf als eine echte Schlagwortsuche.\n\n"
+        if daten.get("freitext_fallback") else ""
+    )
+
     if gesamt == 0:
         return (
             f"## Keine Treffer – {modus}\n\n"
             f"Die Suche nach `{suchbegriff}` ergab keine Ergebnisse.\n\n"
-            f"**Tipps zur Verbesserung der Suche:**\n"
-            f"- Suchbegriffe vereinfachen oder englische Synonyme verwenden\n"
-            f"- Weniger, dafür zentrale Begriffe verwenden (Wörter werden UND-verknüpft)\n"
-            f"- Anderen Suchtyp probieren: Autor statt Titel, oder Schlagwort\n"
+            f"{platzhalter_hinweis}"
+            f"**Der Katalog verknüpft alle Wörter mit UND und sortiert nicht nach "
+            f"Relevanz** – jedes zusätzliche Wort ist ein harter Filter. Deshalb:\n"
+            f"- Ein Konzept weglassen: aus drei Blöcken zwei machen\n"
+            f"- Synonyme statt Zusatzwörter: `Deskilling OR Dequalifizierung; Bildung`\n"
+            f"  (`;` trennt Konzepte, ` OR ` deren Synonyme)\n"
+            f"- Deutsche **und** englische Fassung eines Begriffs per `OR` zusammen suchen\n"
             f"- Verbundsuche: Titel aus anderen Berliner Bibliotheken per Fernleihe"
         )
 
@@ -113,6 +131,8 @@ def _formatiere_ergebnisse(daten: dict, suchbegriff: str,
         f"## {modus}: `{suchbegriff}`",
         f"**{gesamt} Treffer gefunden** | Angezeigt: {len(treffer_liste)}\n",
     ]
+    if fallback_hinweis or platzhalter_hinweis:
+        ausgabe.insert(1, (fallback_hinweis + platzhalter_hinweis).strip())
 
     for i, t in enumerate(treffer_liste, 1):
         ausgabe.append(_formatiere_treffer(t, i))
@@ -151,10 +171,15 @@ def register_opac_tools(mcp):
                 "Mehrere Wörter werden bei 'any'/'title'/'author' UND-verknüpft "
                 "(alle Wörter müssen vorkommen, nicht als starre Phrase), "
                 "z.B. 'Beton Nachhaltigkeit'. Bei 'subject' zählt die Mehrwort-"
-                "Eingabe als GND-Schlagwort-Phrase, z.B. 'Nachhaltiges Bauen'."
+                "Eingabe als GND-Schlagwort-Phrase, z.B. 'Nachhaltiges Bauen'. "
+                "Blocksuche: ';' trennt Konzepte (UND), ' OR ' deren Synonyme, "
+                "Anführungszeichen erzwingen eine Phrase — "
+                "'KI OR \"Künstliche Intelligenz\"; Bildung OR Unterricht'. "
+                "Zwei Konzepte sind meist ergiebiger als drei; Trunkierung (*) "
+                "beherrscht der Katalog nicht."
             ),
             min_length=2,
-            max_length=200,
+            max_length=400,
         ),
         suchtyp: str = Field(
             default="any",
@@ -316,7 +341,16 @@ def register_opac_tools(mcp):
         },
     )
     async def kobv_verbund_suche(
-        suchbegriff: str = Field(..., description="Suchbegriff (Titel, Schlagwort, freier Text)"),
+        suchbegriff: str = Field(
+            ...,
+            description=(
+                "Suchbegriff (Titel, Schlagwort, freier Text). Mehrere Wörter "
+                "werden UND-verknüpft. Blocksuche wie bei opac_suche: ';' trennt "
+                "Konzepte, ' OR ' deren Synonyme."
+            ),
+            min_length=2,
+            max_length=400,
+        ),
         suchtyp: str = Field(default="any", description="'any', 'title', 'author', 'subject'"),
         max_treffer: int = Field(default=10, ge=1, le=25),
     ) -> str:

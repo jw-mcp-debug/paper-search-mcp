@@ -13,6 +13,7 @@ Voraussetzungen:
 
 import io
 import logging
+import re
 from typing import Optional
 
 import pymarc
@@ -49,13 +50,70 @@ BIB1_ATTR = {
 # subject = GND-Schlagwort (echte Mehrwort-Phrasen), isbn = einzelner Token.
 _PHRASE_ATTRS = {BIB1_ATTR["subject"], BIB1_ATTR["isbn"]}
 
+# Blocksuche: ';' trennt Blöcke (UND-verknüpft), ' OR ' die Alternativen
+# innerhalb eines Blocks. Das bildet die Suchbegriffstabelle einer Recherche
+# direkt ab: ein Block je Konzept, die Synonyme des Konzepts per OR.
+_BLOCK_TRENNER = ";"
+_ODER_TRENNER = re.compile(r"\s+OR\s+", re.IGNORECASE)
+
+# Der KOBV-Server unterstützt keine Trunkierung (Bib-1-Attribut 5 antwortet
+# "unsupported search"). Ein * oder ? im Suchwort wird nicht etwa abgelehnt,
+# sondern stillschweigend als Wortbestandteil gelesen: "Bildung*" liefert
+# exakt dieselbe Treffermenge wie "Bildung". Das ist gefährlicher als ein
+# Fehler, weil es wie eine funktionierende Trunkierung aussieht.
+_PLATZHALTER = re.compile(r"[*?]")
+
 
 def _term_clause(use_attr: int, wort: str) -> str:
     """Baut eine einzelne Term-Klausel '@attr 1=<use> <wort>'."""
     return f"@attr 1={use_attr} {wort}"
 
 
-def _pqf(use_attr: int, term: str, isil: Optional[str] = BHT_ISIL) -> str:
+def _falte(operator: str, klauseln) -> str:
+    """Faltet Klauseln rechts zu einem PQF-Operatorbaum ('and' oder 'or')."""
+    klauseln = list(klauseln)
+    ausdruck = klauseln[-1]
+    for klausel in reversed(klauseln[:-1]):
+        ausdruck = f"@{operator} {klausel} {ausdruck}"
+    return ausdruck
+
+
+def zerlege_bloecke(term: str) -> list:
+    """Zerlegt eine Eingabe in Blöcke von Alternativen.
+
+        'Deskilling OR Dequalifizierung; Bildung'
+        -> [['Deskilling', 'Dequalifizierung'], ['Bildung']]
+
+    Ohne ';' und ' OR ' entsteht genau ein Block mit einer Alternative — solche
+    Eingaben verhalten sich exakt wie vor Einführung der Blocksuche.
+    """
+    bloecke = []
+    for roh in term.split(_BLOCK_TRENNER):
+        alternativen = [a.strip() for a in _ODER_TRENNER.split(roh) if a.strip()]
+        if alternativen:
+            bloecke.append(alternativen)
+    return bloecke
+
+
+def _alternative_klausel(use_attr: int, alternative: str) -> str:
+    """Baut die Klausel für eine einzelne Alternative.
+
+    Explizit gesetzte Anführungszeichen erzwingen eine Phrase. Sonst gilt das
+    bisherige Verhalten: subject/isbn als Phrase, alles andere UND-verknüpft.
+    """
+    if len(alternative) > 2 and alternative.startswith('"') and alternative.endswith('"'):
+        return _term_clause(use_attr, alternative)
+
+    woerter = alternative.split()
+    if len(woerter) <= 1:
+        return _term_clause(use_attr, alternative)
+    if use_attr in _PHRASE_ATTRS:
+        return _term_clause(use_attr, f'"{alternative}"')
+    return _falte("and", (_term_clause(use_attr, w) for w in woerter))
+
+
+def _pqf(use_attr: int, term: str, isil=BHT_ISIL,
+         auch_freitext: bool = False) -> str:
     """
     Baut eine PQF-Suchanfrage (Prefix Query Format).
 
@@ -66,27 +124,36 @@ def _pqf(use_attr: int, term: str, isil: Optional[str] = BHT_ISIL) -> str:
     - subject / isbn:        Mehrwort bleibt PHRASE ("...")
       (GND-Schlagwörter sind echte Mehrwort-Phrasen)
 
-    Hinweis: Der KOBV-Z39.50-Zugang unterstützt KEINE Trunkierung (weder das
-    Bib-1-Attribut 5 noch Platzhalter *,? im Suchwort) – Diagnose "unsupported
-    search". Deshalb ist keine Trunkierung implementiert.
+    Blocksuche: 'A OR B; C' wird zu @and @or(A,B) C. Jeder Block ist ein
+    Konzept, die Alternativen darin sind seine Synonyme. Der Katalog kennt
+    kein Relevanzranking — jedes zusätzliche Konzept ist ein harter Filter,
+    weshalb zwei Blöcke in der Regel ergiebiger sind als drei.
+
+    auch_freitext=True sucht jede Alternative zusätzlich im Freitextfeld
+    (@or über use_attr und 'any'). Das fängt Begriffe ab, die als GND-
+    Schlagwort nicht angesetzt sind und in einer reinen Schlagwortsuche
+    deshalb null Treffer ergäben.
 
     Mit ISIL-Filter wird das Ganze per @and auf den BHT-Bestand eingegrenzt:
         @and @attr 1=1044 DE-B768 <suchausdruck>
     """
     term = term.strip()
-    woerter = term.split()
+    bloecke = zerlege_bloecke(term) or [[term]]
 
-    if len(woerter) <= 1:
-        main = _term_clause(use_attr, term)
-    elif use_attr in _PHRASE_ATTRS:
-        # Mehrwort-Phrase (GND-Schlagwort / ISBN)
-        main = _term_clause(use_attr, f'"{term}"')
-    else:
-        # Mehrere Wörter -> UND-Verknüpfung (Rechtsfaltung der @and-Operatoren)
-        clauses = [_term_clause(use_attr, w) for w in woerter]
-        main = clauses[-1]
-        for c in reversed(clauses[:-1]):
-            main = f"@and {c} {main}"
+    block_klauseln = []
+    for alternativen in bloecke:
+        klauseln = []
+        for alternative in alternativen:
+            klausel = _alternative_klausel(use_attr, alternative)
+            if auch_freitext and use_attr != BIB1_ATTR["any"]:
+                klausel = _falte("or", [
+                    klausel,
+                    _alternative_klausel(BIB1_ATTR["any"], alternative),
+                ])
+            klauseln.append(klausel)
+        block_klauseln.append(_falte("or", klauseln))
+
+    main = _falte("and", block_klauseln)
 
     if isil:
         return f"@and @attr 1={BIB1_ATTR['isil']} {isil} {main}"
@@ -240,13 +307,10 @@ def _parse_marc(raw_data, isil: Optional[str] = BHT_ISIL) -> dict:
 # Suchfunktion
 # ---------------------------------------------------------------------------
 
-def suche_bht_sync(use_attr: int, term: str,
-                   isil: Optional[str] = BHT_ISIL,
-                   max_records: int = 10) -> dict:
-    """
-    Synchrone Z39.50-Suche über PyZ3950.
-    """
-    pqf_query = _pqf(use_attr, term, isil)
+def _suche_einmal(use_attr: int, term: str, isil: Optional[str],
+                  max_records: int, auch_freitext: bool = False) -> dict:
+    """Setzt genau eine Z39.50-Anfrage ab."""
+    pqf_query = _pqf(use_attr, term, isil, auch_freitext=auch_freitext)
     log.debug(f"PQF: {pqf_query}")
 
     try:
@@ -286,6 +350,36 @@ def suche_bht_sync(use_attr: int, term: str,
             "fehler": f"Unerwarteter Fehler: {type(e).__name__}: {e}",
             "treffer_gesamt": 0, "treffer": [],
         }
+
+
+def suche_bht_sync(use_attr: int, term: str,
+                   isil: Optional[str] = BHT_ISIL,
+                   max_records: int = 10) -> dict:
+    """
+    Synchrone Z39.50-Suche über PyZ3950.
+
+    Eine Schlagwortsuche ohne Treffer bedeutet selten, dass der Bestand nichts
+    hergibt — meist ist der Begriff schlicht nicht als GND-Schlagwort
+    angesetzt ("Deskilling": 0 als Schlagwort, 115 im Freitext). Dann wird
+    dieselbe Anfrage zusätzlich über das Freitextfeld gestellt und das
+    Ergebnis als `freitext_fallback` gekennzeichnet, damit der Wechsel im
+    Rechercheweg sichtbar wird statt still zu geschehen.
+    """
+    ergebnis = _suche_einmal(use_attr, term, isil, max_records)
+
+    if (use_attr == BIB1_ATTR["subject"]
+            and not ergebnis.get("fehler")
+            and ergebnis.get("treffer_gesamt", 0) == 0):
+        erweitert = _suche_einmal(use_attr, term, isil, max_records,
+                                  auch_freitext=True)
+        if erweitert.get("treffer_gesamt", 0) > 0:
+            erweitert["freitext_fallback"] = True
+            ergebnis = erweitert
+
+    if _PLATZHALTER.search(term):
+        ergebnis["platzhalter"] = True
+
+    return ergebnis
 
 
 async def suche_bht(use_attr: int, term: str,

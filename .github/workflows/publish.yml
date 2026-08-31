@@ -53,6 +53,8 @@ jobs:
           tests/test_search_papers_timeout.py
           tests/test_tool_allowlist.py
           tests/test_tool_schema_diet.py
+          tests/test_opac_blocksuche.py
+          tests/test_argument_mismatch.py
           tests/test_payload_diet.py
           tests/test_search_options.py
           tests/test_crossref_metadata.py

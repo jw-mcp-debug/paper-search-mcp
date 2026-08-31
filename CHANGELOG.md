@@ -15,6 +15,104 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > names, parameters, and result formats may still change between minor versions.
 
 ---
+## [0.7.0] – 2026-08-29
+
+Die Katalogsuche versteht Konzepte und ihre Synonyme in einer Anfrage, die
+Beschaffungswerkzeuge sind entfernt, und ein fehlgeleiteter Aufruf bekommt eine
+Antwort, mit der sich etwas anfangen lässt. Die Tool-Liste kostet damit rund
+7.900 statt 13.499 Tokens in **jeder** Anfrage.
+
+**Breaking:** Die 29 Werkzeuge `download_*` und `read_*` gibt es nicht mehr. Ein
+Client, der Volltexte über diesen Server bezieht, bleibt auf 0.6.0 — die Suche
+ist nicht betroffen.
+
+**Upgrading:** remove the connector in the client and add it again — the tool set
+and the parameter descriptions changed, and clients cache the tool list.
+
+### Added
+
+- **Die Katalog-Tools verstehen eine Blocksuche.** `;` trennt Konzepte (die
+  UND-verknüpft werden), ` OR ` deren Synonyme, Anführungszeichen erzwingen
+  eine Phrase: `KI OR "Künstliche Intelligenz"; Bildung OR Unterricht`. Der
+  KOBV-Katalog sortiert nicht nach Relevanz und liest jedes Wort als harten
+  UND-Filter — wer drei Konzepte in eine Anfrage schreibt, bekommt regelmäßig
+  null Treffer, obwohl der Bestand zum Thema etwas hergibt. In einer echten
+  Recherchesitzung liefen 9 von 24 Kataloganfragen leer, sechs davon
+  vermeidbar: `Deskilling Künstliche Intelligenz` (0 Treffer) ergibt als
+  `Deskilling OR Dequalifizierung; Bildung OR Hochschule` 12 Treffer,
+  `KI Künstliche Intelligenz Bildung` (0) im BHT-Bestand 28. Eingaben ohne
+  `;` und ` OR ` verhalten sich unverändert.
+
+### Changed
+
+- **Eine Schlagwortsuche ohne Treffer sucht zusätzlich im Freitextfeld** und
+  weist das im Ergebnis aus. Ein Begriff, der nicht als GND-Schlagwort
+  angesetzt ist, ergab bisher null Treffer, ohne dass erkennbar war warum:
+  `Deskilling` findet als Schlagwort nichts, im Freitext 115 Titel. Der
+  Rückfall greift nur bei null Treffern — die Präzision einer erfolgreichen
+  Schlagwortsuche bleibt unangetastet, und der Wechsel steht im Ergebnistext,
+  statt still zu geschehen.
+- **`*` und `?` werden als wirkungslos gemeldet.** Der KOBV-Server beherrscht
+  keine Trunkierung (Bib-1-Attribut 5 antwortet „unsupported search"), lehnt
+  Platzhalter aber nicht ab, sondern liest sie als Wortbestandteil: `Bildung*`
+  liefert exakt dieselbe Treffermenge wie `Bildung`. Das sah bisher wie eine
+  funktionierende Trunkierung aus.
+- **Das Nullresultat erklärt die UND-Verknüpfung**, statt vier allgemeine
+  Tipps zu geben, und `kobv_verbund_suche` beschreibt sein Mehrwort-Verhalten
+  jetzt so wie `opac_suche` — dort fehlte der Hinweis ganz, was einen Teil der
+  leeren Verbundsuchen erklärt.
+- **Argumente, die zu keinem Parameter passen, werden erklärt statt vermisst.**
+  Ein Client mit zwischengespeicherter Tool-Liste sendet nach einer
+  Parameteränderung weiter die alte Form. Pydantic meldete daraufhin das
+  *fehlende* Feld („suchbegriff Field required"), während der Aufrufende auf
+  ein `suchbegriff` blickte, das er sehr wohl übergeben hatte — nur eine Ebene
+  tiefer in einem Wrapper. Diese Antwort kostete eine echte Sitzung sechs
+  identische Wiederholungen, bevor sie das Tool aufgab und aus dem
+  Ersatzwerkzeug eine falsche Aussage über den BHT-Bestand ableitete. Die
+  Meldung nennt jetzt die tatsächlichen Parameter und beide Auswege: flach
+  übergeben, und den Connector im Client neu laden. Sie greift nur, wenn
+  *kein* übergebenes Argument passt — sobald eines passt, ist die Meldung von
+  pydantic die genauere.
+- **`CHARS_PER_TOKEN` in `scripts/compare_deployments.py`: 3,5 → 2,6.** Die alte
+  Zahl stammt aus einer Messung von vor den Diätrunden und hat die Tool-Liste
+  seither um 34 % zu billig gerechnet — der Changelog zu 0.5.0 nennt 9.582 Tokens,
+  wo in Wirklichkeit 13.499 anfielen. Der Kommentar an der Konstante sagt jetzt,
+  woher der Wert stammt und wann er neu zu messen ist, statt ihn auf Treu und
+  Glauben weiterzureichen.
+- Tool-Liste 10.065 → 10.179 Tokens (+114) für die erweiterten Beschreibungen.
+
+### Fixed
+
+- **Die Semantic-Scholar-Netztests überspringen sich, wenn der Lauf gedrosselt
+  wird.** Sie fragen die Live-API ohne Schlüssel ab, und ein CI-Runner teilt
+  seine IP mit jedem anderen Job auf dem Host: Die Erreichbarkeitsprüfung beim
+  Import kann durchgehen, während die Anfrage Sekunden später 429 bekommt. Genau
+  daran ist der erste 0.7.0-Build gescheitert. Dieselbe Behandlung, die dblp in
+  `9ac2084` bekommen hat — eine Drosselung ist eine Netzbedingung, kein Defekt
+  im Prüfgegenstand.
+
+### Removed
+
+- **Die 29 Beschaffungswerkzeuge (`download_*`, `read_*`) sind entfernt.** Sie
+  waren der größte Block der Tool-Liste — 15.031 Zeichen, 42 %, mehr als die acht
+  Werkzeuge, die eine Recherche tatsächlich benutzt — und wurden in jeder
+  einzelnen Anfrage mitgeschickt, obwohl sie an drei Stellen ausgeschlossen
+  waren: im System-Prompt des Rechercheagenten, in SKILL.md und in der dafür
+  vorgesehenen Allowlist. Ein Ausschluss, den man an drei Stellen wiederholen
+  muss, ist keine Funktion mehr. Die Searcher-Klassen in `academic_platforms/`
+  bleiben unberührt, `search_papers` erreicht weiterhin jede Quelle. Mit
+  entfallen sind die nur von ihnen benutzten Helfer `_download_from_url`,
+  `_try_repository_fallback`, `_safe_filename` und `tests/test_fallback.py`;
+  `server.py` schrumpft von 1.526 auf 943 Zeilen.
+- Die Tool-Liste fällt damit von **13.499 auf rund 7.900 Tokens** je Anfrage.
+  Diese Zahlen sind an der Kontextanzeige einer laufenden LibreChat-Sitzung
+  abgelesen, nicht geschätzt: die im Repo verwendete Näherung von 3,5 Zeichen je
+  Token unterschätzt die reale Dichte von 2,61 um 34 %. Die früheren Diätrunden
+  haben vor allem gut komprimierbare Zeichen entfernt (Einrückung, wiederholte
+  Schlüssel, `{"result": …}`-Wrapper) — 31 % der Zeichen, aber nur 10 % der
+  Tokens. Übrig blieb deutscher Fließtext, der je Zeichen am teuersten ist.
+
+---
 ## [0.6.0] – 2026-08-27
 
 Zeitschriftenkennzahlen: ein neues Tool `zeitschrift_profil`, die Zeitschrift als
@@ -80,6 +178,21 @@ basis, different number.
   limit.** It calls the live API but was missing the `skipUnless` guard its
   neighbours in the same file carry. With that fixed, the file joins the CI list,
   as does `tests/test_openalex_sources.py`.
+- **`tests/test_server.py` no longer asserts a source list that does not exist.**
+  `test_all_sources_include_new_platforms` and `test_parse_sources_with_new_platforms`
+  still expected `citeseerx` and `ssrn` in `ALL_SOURCES`; both were removed in
+  0.2.0 and the two tests have failed ever since. **SSRN is not part of the
+  aggregated search** and `search_papers` cannot reach it — a re-check on
+  2026-08-27 confirms why: the documented result page
+  (`www.ssrn.com/index.cfm/en/rps-stage1-results/`) answers 404, and the
+  alternate (`papers.ssrn.com/sol3/results.cfm`) answers 403 with a Cloudflare
+  challenge, so `SSRNSearcher.search()` returns zero hits for every query.
+  `academic_platforms/ssrn.py` stays in the tree and keeps its unit tests — those
+  parse recorded HTML and do not touch the network — and the 0.5.0 serialization
+  fix remains correct; neither makes the live endpoint reachable. The
+  assertions now match the actual list, and a new
+  `test_retired_platforms_stay_out_of_all_sources` pins the exclusion so a
+  future re-add has to come with a connector that works.
 
 ---
 ## [0.5.0] – 2026-08-23

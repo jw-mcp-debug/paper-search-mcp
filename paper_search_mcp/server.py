@@ -5,7 +5,6 @@ import inspect
 import os
 import logging
 import re
-import httpx
 from mcp.server.fastmcp import FastMCP
 from .config import get_env
 from .academic_platforms.arxiv import ArxivSearcher
@@ -26,9 +25,9 @@ from .academic_platforms.zenodo import ZenodoSearcher
 from .academic_platforms.medrxiv import MedRxivSearcher
 from .academic_platforms.base_search import BASESearcher
 from .academic_platforms.hal import HALSearcher
-from .utils import extract_doi
 
-from .paper import Paper
+from mcp.server.fastmcp.exceptions import ToolError
+
 from .journals import openalex_sources as quellen
 
 # Initialize MCP server
@@ -123,7 +122,6 @@ async def async_search(searcher, query: str, max_results: int, **kwargs) -> List
     else:
         papers = await asyncio.to_thread(searcher.search, query, max_results=max_results)
     return [paper.to_dict() for paper in papers]
-
 
 
 # Upper bound per source in search_papers. Without it a single stalled
@@ -283,83 +281,6 @@ def _dedupe_papers(papers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         deduped.append(paper)
 
     return deduped
-
-
-def _safe_filename(filename_hint: str, default: str = "paper") -> str:
-    safe = re.sub(r"[^a-zA-Z0-9._-]+", "_", filename_hint).strip("._")
-    if not safe:
-        return default
-    return safe[:120]
-
-
-async def _download_from_url(pdf_url: str, save_path: str, filename_hint: str = "paper") -> Optional[str]:
-    if not pdf_url:
-        return None
-
-    os.makedirs(save_path, exist_ok=True)
-    output_name = f"{_safe_filename(filename_hint)}.pdf"
-    output_path = os.path.join(save_path, output_name)
-
-    try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
-            response = await client.get(pdf_url)
-
-        if response.status_code >= 400 or not response.content:
-            return None
-
-        content_type = (response.headers.get("content-type") or "").lower()
-        is_pdf = "pdf" in content_type or response.content.startswith(b"%PDF") or pdf_url.lower().endswith(".pdf")
-        if not is_pdf:
-            logger.warning("Resolved URL is not a PDF candidate: %s (content-type=%s)", pdf_url, content_type)
-            return None
-
-        with open(output_path, "wb") as file_obj:
-            file_obj.write(response.content)
-
-        return output_path
-    except Exception as exc:
-        logger.warning("Direct URL download failed for %s: %s", pdf_url, exc)
-        return None
-
-
-async def _try_repository_fallback(doi: str, title: str, save_path: str) -> tuple[Optional[str], str]:
-    repository_searchers = [
-        ("openaire", openaire_searcher),
-        ("core", core_searcher),
-        ("europepmc", europepmc_searcher),
-        ("pmc", pmc_searcher),
-    ]
-
-    query_candidates = [(doi or "").strip(), (title or "").strip()]
-    query_candidates = [candidate for candidate in query_candidates if candidate]
-    if not query_candidates:
-        return None, "no DOI/title provided for repository fallback"
-
-    repository_errors: List[str] = []
-
-    for repo_name, searcher in repository_searchers:
-        for query in query_candidates:
-            try:
-                papers = await asyncio.to_thread(searcher.search, query, max_results=3)
-            except Exception as exc:
-                repository_errors.append(f"{repo_name}:{exc}")
-                continue
-
-            if not papers:
-                continue
-
-            for paper in papers:
-                pdf_url = str(getattr(paper, "pdf_url", "") or "").strip()
-                if not pdf_url:
-                    continue
-
-                raw_paper_id = getattr(paper, "paper_id", "")
-                paper_id = str(raw_paper_id or query).strip()
-                downloaded = await _download_from_url(pdf_url, save_path, f"{repo_name}_{paper_id}")
-                if downloaded:
-                    return downloaded, ""
-
-    return None, "; ".join(repository_errors)
 
 
 @mcp.tool()
@@ -573,155 +494,6 @@ async def search_iacr(
 
 
 @mcp.tool()
-async def download_arxiv(paper_id: str, save_path: str = "./downloads") -> str:
-    """Download PDF of an arXiv paper.
-
-    Args:
-        paper_id: arXiv paper ID (e.g., '2106.12345').
-        save_path: Directory to save the PDF (default: './downloads').
-    Returns:
-        Path to the downloaded PDF file.
-    """
-    return await asyncio.to_thread(arxiv_searcher.download_pdf, paper_id, save_path)
-
-
-@mcp.tool()
-async def download_pubmed(paper_id: str, save_path: str = "./downloads") -> str:
-    """Attempt to download PDF of a PubMed paper.
-
-    Args:
-        paper_id: PubMed ID (PMID).
-        save_path: Directory to save the PDF (default: './downloads').
-    Returns:
-        str: Message indicating that direct PDF download is not supported.
-    """
-    try:
-        return pubmed_searcher.download_pdf(paper_id, save_path)
-    except NotImplementedError as e:
-        return str(e)
-
-
-@mcp.tool()
-async def download_biorxiv(paper_id: str, save_path: str = "./downloads") -> str:
-    """Download PDF of a bioRxiv paper.
-
-    Args:
-        paper_id: bioRxiv DOI.
-        save_path: Directory to save the PDF (default: './downloads').
-    Returns:
-        Path to the downloaded PDF file.
-    """
-    return biorxiv_searcher.download_pdf(paper_id, save_path)
-
-
-@mcp.tool()
-async def download_medrxiv(paper_id: str, save_path: str = "./downloads") -> str:
-    """Download PDF of a medRxiv paper.
-
-    Args:
-        paper_id: medRxiv DOI.
-        save_path: Directory to save the PDF (default: './downloads').
-    Returns:
-        Path to the downloaded PDF file.
-    """
-    return medrxiv_searcher.download_pdf(paper_id, save_path)
-
-
-@mcp.tool()
-async def download_iacr(paper_id: str, save_path: str = "./downloads") -> str:
-    """Download PDF of an IACR ePrint paper.
-
-    Args:
-        paper_id: IACR paper ID (e.g., '2009/101').
-        save_path: Directory to save the PDF (default: './downloads').
-    Returns:
-        Path to the downloaded PDF file.
-    """
-    return iacr_searcher.download_pdf(paper_id, save_path)
-
-
-@mcp.tool()
-async def read_arxiv_paper(paper_id: str, save_path: str = "./downloads") -> str:
-    """Read and extract text content from an arXiv paper PDF.
-
-    Args:
-        paper_id: arXiv paper ID (e.g., '2106.12345').
-        save_path: Directory where the PDF is/will be saved (default: './downloads').
-    Returns:
-        str: The extracted text content of the paper.
-    """
-    try:
-        return arxiv_searcher.read_paper(paper_id, save_path)
-    except Exception as e:
-        print(f"Error reading paper {paper_id}: {e}")
-        return ""
-
-
-@mcp.tool()
-async def read_pubmed_paper(paper_id: str, save_path: str = "./downloads") -> str:
-    """Read and extract text content from a PubMed paper.
-
-    Args:
-        paper_id: PubMed ID (PMID).
-        save_path: Directory where the PDF would be saved (unused).
-    Returns:
-        str: Message indicating that direct paper reading is not supported.
-    """
-    return pubmed_searcher.read_paper(paper_id, save_path)
-
-
-@mcp.tool()
-async def read_biorxiv_paper(paper_id: str, save_path: str = "./downloads") -> str:
-    """Read and extract text content from a bioRxiv paper PDF.
-
-    Args:
-        paper_id: bioRxiv DOI.
-        save_path: Directory where the PDF is/will be saved (default: './downloads').
-    Returns:
-        str: The extracted text content of the paper.
-    """
-    try:
-        return biorxiv_searcher.read_paper(paper_id, save_path)
-    except Exception as e:
-        print(f"Error reading paper {paper_id}: {e}")
-        return ""
-
-
-@mcp.tool()
-async def read_medrxiv_paper(paper_id: str, save_path: str = "./downloads") -> str:
-    """Read and extract text content from a medRxiv paper PDF.
-
-    Args:
-        paper_id: medRxiv DOI.
-        save_path: Directory where the PDF is/will be saved (default: './downloads').
-    Returns:
-        str: The extracted text content of the paper.
-    """
-    try:
-        return medrxiv_searcher.read_paper(paper_id, save_path)
-    except Exception as e:
-        print(f"Error reading paper {paper_id}: {e}")
-        return ""
-
-
-@mcp.tool()
-async def read_iacr_paper(paper_id: str, save_path: str = "./downloads") -> str:
-    """Read and extract text content from an IACR ePrint paper PDF.
-
-    Args:
-        paper_id: IACR paper ID (e.g., '2009/101').
-        save_path: Directory where the PDF is/will be saved (default: './downloads').
-    Returns:
-        str: The extracted text content of the paper.
-    """
-    try:
-        return iacr_searcher.read_paper(paper_id, save_path)
-    except Exception as e:
-        print(f"Error reading paper {paper_id}: {e}")
-        return ""
-
-
-@mcp.tool()
 async def search_semantic(query: str, year: Optional[str] = None, max_results: int = 10) -> List[Dict]:
     """Search academic papers from Semantic Scholar.
 
@@ -737,52 +509,6 @@ async def search_semantic(query: str, year: Optional[str] = None, max_results: i
         kwargs['year'] = year
     papers = await async_search(semantic_searcher, query, max_results, **kwargs)
     return papers if papers else []
-
-
-@mcp.tool()
-async def download_semantic(paper_id: str, save_path: str = "./downloads") -> str:
-    """Download PDF of a Semantic Scholar paper.    
-
-    Args:
-        paper_id: Semantic Scholar paper ID, Paper identifier in one of the following formats:
-            - Semantic Scholar ID (e.g., "649def34f8be52c8b66281af98ae884c09aef38b")
-            - DOI:<doi> (e.g., "DOI:10.18653/v1/N18-3011")
-            - ARXIV:<id> (e.g., "ARXIV:2106.15928")
-            - MAG:<id> (e.g., "MAG:112218234")
-            - ACL:<id> (e.g., "ACL:W12-3903")
-            - PMID:<id> (e.g., "PMID:19872477")
-            - PMCID:<id> (e.g., "PMCID:2323736")
-            - URL:<url> (e.g., "URL:https://arxiv.org/abs/2106.15928v1")
-        save_path: Directory to save the PDF (default: './downloads').
-    Returns:
-        Path to the downloaded PDF file.
-    """ 
-    return semantic_searcher.download_pdf(paper_id, save_path)
-
-
-@mcp.tool()
-async def read_semantic_paper(paper_id: str, save_path: str = "./downloads") -> str:
-    """Read and extract text content from a Semantic Scholar paper. 
-
-    Args:
-        paper_id: Semantic Scholar paper ID, Paper identifier in one of the following formats:
-            - Semantic Scholar ID (e.g., "649def34f8be52c8b66281af98ae884c09aef38b")
-            - DOI:<doi> (e.g., "DOI:10.18653/v1/N18-3011")
-            - ARXIV:<id> (e.g., "ARXIV:2106.15928")
-            - MAG:<id> (e.g., "MAG:112218234")
-            - ACL:<id> (e.g., "ACL:W12-3903")
-            - PMID:<id> (e.g., "PMID:19872477")
-            - PMCID:<id> (e.g., "PMCID:2323736")
-            - URL:<url> (e.g., "URL:https://arxiv.org/abs/2106.15928v1")
-        save_path: Directory where the PDF is/will be saved (default: './downloads').
-    Returns:
-        str: The extracted text content of the paper.
-    """
-    try:
-        return semantic_searcher.read_paper(paper_id, save_path)
-    except Exception as e:
-        print(f"Error reading paper {paper_id}: {e}")
-        return ""
 
 
 @mcp.tool()
@@ -828,125 +554,6 @@ async def get_crossref_paper_by_doi(doi: str) -> Dict:
     """
     paper = await asyncio.to_thread(crossref_searcher.get_paper_by_doi, doi)
     return paper.to_dict() if paper else {}
-
-
-@mcp.tool()
-async def download_crossref(paper_id: str, save_path: str = "./downloads") -> str:
-    """Attempt to download PDF of a CrossRef paper.
-
-    Args:
-        paper_id: CrossRef DOI (e.g., '10.1038/nature12373').
-        save_path: Directory to save the PDF (default: './downloads').
-    Returns:
-        str: Message indicating that direct PDF download is not supported.
-        
-    Note:
-        CrossRef is a citation database and doesn't provide direct PDF downloads.
-        Use the DOI to access the paper through the publisher's website.
-    """
-    try:
-        return crossref_searcher.download_pdf(paper_id, save_path)
-    except NotImplementedError as e:
-        return str(e)
-
-
-@mcp.tool()
-async def download_with_fallback(
-    source: str,
-    paper_id: str,
-    doi: str = "",
-    title: str = "",
-    save_path: str = "./downloads",
-) -> str:
-    """Try source-native download, then OA repositories, then Unpaywall.
-
-    Bewusste Grenze dieses Dienstes: Es werden ausschliesslich legale,
-    frei zugaengliche Volltexte beruecksichtigt. Schattenbibliotheken
-    (z. B. Sci-Hub) sind nicht Teil der Fallback-Kette.
-
-    Args:
-        source: Source name (arxiv, biorxiv, iacr, semantic, crossref, pubmed, pmc, core, europepmc, doaj, zenodo).
-        paper_id: Source-native paper identifier.
-        doi: Optional DOI used for repository/Unpaywall fallback.
-        title: Optional title used for repository fallback when DOI is unavailable.
-        save_path: Directory to save downloaded files.
-    Returns:
-        Download path on success or explanatory error message.
-    """
-    source_name = source.strip().lower()
-
-    primary_downloaders = {
-        "arxiv": arxiv_searcher.download_pdf,
-        "biorxiv": biorxiv_searcher.download_pdf,
-        "medrxiv": medrxiv_searcher.download_pdf,
-        "iacr": iacr_searcher.download_pdf,
-        "semantic": semantic_searcher.download_pdf,
-        "pubmed": pubmed_searcher.download_pdf,
-        "crossref": crossref_searcher.download_pdf,
-        "pmc": pmc_searcher.download_pdf,
-        "core": core_searcher.download_pdf,
-        "europepmc": europepmc_searcher.download_pdf,
-        "doaj": doaj_searcher.download_pdf,
-        "base": base_searcher.download_pdf,
-        "zenodo": zenodo_searcher.download_pdf,
-        "hal": hal_searcher.download_pdf,
-    }
-
-    attempt_errors: List[str] = []
-    primary_error = ""
-    if source_name in primary_downloaders:
-        try:
-            primary_result = await asyncio.to_thread(primary_downloaders[source_name], paper_id, save_path)
-            if isinstance(primary_result, str) and os.path.exists(primary_result):
-                return primary_result
-            if isinstance(primary_result, str) and primary_result:
-                primary_error = primary_result
-        except Exception as exc:
-            primary_error = str(exc)
-            logger.warning("Primary download failed for %s/%s: %s", source_name, paper_id, exc)
-    else:
-        primary_error = f"Unsupported source '{source_name}' for primary download."
-
-    if primary_error:
-        attempt_errors.append(f"primary: {primary_error}")
-
-    repository_result, repository_error = await _try_repository_fallback(doi, title, save_path)
-    if repository_result:
-        return repository_result
-    if repository_error:
-        attempt_errors.append(f"repositories: {repository_error}")
-
-    normalized_doi = (doi or "").strip()
-    if normalized_doi:
-        unpaywall_url = await asyncio.to_thread(unpaywall_resolver.resolve_best_pdf_url, normalized_doi)
-        if unpaywall_url:
-            unpaywall_result = await _download_from_url(unpaywall_url, save_path, f"unpaywall_{normalized_doi}")
-            if unpaywall_result:
-                return unpaywall_result
-            attempt_errors.append("unpaywall: resolved OA URL but download failed")
-        else:
-            attempt_errors.append("unpaywall: no OA URL found (or PAPER_SEARCH_MCP_UNPAYWALL_EMAIL/UNPAYWALL_EMAIL missing)")
-    else:
-        attempt_errors.append("unpaywall: DOI not provided")
-
-    return "Download failed after OA fallback chain. Details: " + " | ".join(attempt_errors)
-
-
-@mcp.tool()
-async def read_crossref_paper(paper_id: str, save_path: str = "./downloads") -> str:
-    """Attempt to read and extract text content from a CrossRef paper.
-
-    Args:
-        paper_id: CrossRef DOI (e.g., '10.1038/nature12373').
-        save_path: Directory where the PDF is/will be saved (default: './downloads').
-    Returns:
-        str: Message indicating that direct paper reading is not supported.
-        
-    Note:
-        CrossRef is a citation database and doesn't provide direct paper content.
-        Use the DOI to access the paper through the publisher's website.
-    """
-    return crossref_searcher.read_paper(paper_id, save_path)
 
 
 @mcp.tool()
@@ -1114,194 +721,6 @@ async def search_unpaywall(query: str, max_results: int = 10) -> List[Dict]:
     return papers if papers else []
 
 
-@mcp.tool()
-async def read_dblp_paper(paper_id: str, save_path: str = "./downloads") -> str:
-    """Attempt to read and extract text content from a dblp paper.
-
-    Note: dblp doesn't provide direct paper content access.
-    This function returns an informative message.
-
-    Args:
-        paper_id: dblp paper identifier.
-        save_path: Directory where the PDF would be saved (unused).
-    Returns:
-        str: Message indicating that direct paper reading is not supported.
-    """
-    return dblp_searcher.read_paper(paper_id, save_path)
-
-
-@mcp.tool()
-async def download_dblp(paper_id: str, save_path: str = "./downloads") -> str:
-    """Download PDF for a paper from dblp.
-
-    Note: dblp doesn't provide direct PDF access.
-    This function returns an informative message.
-
-    Args:
-        paper_id: dblp paper identifier.
-        save_path: Directory to save the PDF (default: './downloads').
-    Returns:
-        str: Message indicating that direct PDF download is not supported.
-    """
-    return dblp_searcher.download_pdf(paper_id, save_path)
-
-
-@mcp.tool()
-async def read_openaire_paper(paper_id: str, save_path: str = "./downloads") -> str:
-    """Attempt to read and extract text content from an OpenAIRE paper.
-
-    Args:
-        paper_id: OpenAIRE paper identifier.
-        save_path: Directory where the PDF is/will be saved (default: './downloads').
-    Returns:
-        str: Extracted text or error message.
-    """
-    return openaire_searcher.read_paper(paper_id, save_path)
-
-
-@mcp.tool()
-async def download_openaire(paper_id: str, save_path: str = "./downloads") -> str:
-    """Download PDF for a paper from OpenAIRE.
-
-    Args:
-        paper_id: OpenAIRE paper identifier.
-        save_path: Directory to save the PDF (default: './downloads').
-    Returns:
-        str: Path to downloaded PDF or error message.
-    """
-    return openaire_searcher.download_pdf(paper_id, save_path)
-
-
-@mcp.tool()
-async def read_doaj_paper(paper_id: str, save_path: str = "./downloads") -> str:
-    """Read and extract text content from a DOAJ paper.
-
-    Args:
-        paper_id: DOAJ paper identifier.
-        save_path: Directory where the PDF is/will be saved (default: './downloads').
-    Returns:
-        str: Extracted text content.
-    """
-    return doaj_searcher.read_paper(paper_id, save_path)
-
-
-@mcp.tool()
-async def download_doaj(paper_id: str, save_path: str = "./downloads") -> str:
-    """Download PDF for a paper from DOAJ.
-
-    Args:
-        paper_id: DOAJ paper identifier.
-        save_path: Directory to save the PDF (default: './downloads').
-    Returns:
-        str: Path to downloaded PDF.
-    """
-    return doaj_searcher.download_pdf(paper_id, save_path)
-
-
-@mcp.tool()
-async def read_base_paper(paper_id: str, save_path: str = "./downloads") -> str:
-    """Read and extract text content from a BASE paper.
-
-    Args:
-        paper_id: BASE paper identifier.
-        save_path: Directory where the PDF is/will be saved (default: './downloads').
-    Returns:
-        str: Extracted text content.
-    """
-    return base_searcher.read_paper(paper_id, save_path)
-
-
-@mcp.tool()
-async def download_base(paper_id: str, save_path: str = "./downloads") -> str:
-    """Download PDF for a paper from BASE.
-
-    Args:
-        paper_id: BASE paper identifier.
-        save_path: Directory to save the PDF (default: './downloads').
-    Returns:
-        str: Path to downloaded PDF.
-    """
-    return base_searcher.download_pdf(paper_id, save_path)
-
-
-@mcp.tool()
-async def read_zenodo_paper(paper_id: str, save_path: str = "./downloads") -> str:
-    """Read and extract text content from a Zenodo paper.
-
-    Args:
-        paper_id: Zenodo paper identifier.
-        save_path: Directory where the PDF is/will be saved (default: './downloads').
-    Returns:
-        str: Extracted text content.
-    """
-    return zenodo_searcher.read_paper(paper_id, save_path)
-
-
-@mcp.tool()
-async def download_zenodo(paper_id: str, save_path: str = "./downloads") -> str:
-    """Download PDF for a paper from Zenodo.
-
-    Args:
-        paper_id: Zenodo paper identifier.
-        save_path: Directory to save the PDF (default: './downloads').
-    Returns:
-        str: Path to downloaded PDF.
-    """
-    return zenodo_searcher.download_pdf(paper_id, save_path)
-
-
-@mcp.tool()
-async def read_hal_paper(paper_id: str, save_path: str = "./downloads") -> str:
-    """Read and extract text content from a HAL paper.
-
-    Args:
-        paper_id: HAL paper identifier.
-        save_path: Directory where the PDF is/will be saved (default: './downloads').
-    Returns:
-        str: Extracted text content.
-    """
-    return hal_searcher.read_paper(paper_id, save_path)
-
-
-@mcp.tool()
-async def download_hal(paper_id: str, save_path: str = "./downloads") -> str:
-    """Download PDF for a paper from HAL.
-
-    Args:
-        paper_id: HAL paper identifier.
-        save_path: Directory to save the PDF (default: './downloads').
-    Returns:
-        str: Path to downloaded PDF.
-    """
-    return hal_searcher.download_pdf(paper_id, save_path)
-
-
-@mcp.tool()
-async def read_openalex_paper(paper_id: str, save_path: str = "./downloads") -> str:
-    """Attempt to read and extract text content from an OpenAlex paper.
-
-    Args:
-        paper_id: OpenAlex paper ID.
-        save_path: Directory where the PDF is/will be saved (default: './downloads').
-    Returns:
-        str: Message indicating that direct paper reading is not supported natively.
-    """
-    return openalex_searcher.read_paper(paper_id, save_path)
-
-
-@mcp.tool()
-async def download_openalex(paper_id: str, save_path: str = "./downloads") -> str:
-    """Download PDF for a paper from OpenAlex.
-
-    Args:
-        paper_id: OpenAlex paper ID.
-        save_path: Directory to save the PDF (default: './downloads').
-    Returns:
-        str: Error message, typically OpenAlex relies on extracted pdf_url instead of direct downloads.
-    """
-    return await asyncio.to_thread(openalex_searcher.download_pdf, paper_id, save_path)
-
-
 # ---------------------------------------------------------------------------
 # Optional IEEE Xplore tools — registered only when API key is set
 # ---------------------------------------------------------------------------
@@ -1428,6 +847,63 @@ def _compact_tool_schemas() -> None:
         _strip_titles(tool.parameters)
 
 
+def _argument_mismatch(name: str, arguments: Any) -> Optional[str]:
+    """Describe arguments that fit no parameter of the tool at all.
+
+    A client caches the tool list, so after a release that renames or
+    restructures parameters it keeps sending the old shape. Pydantic then
+    reports the field it is *missing* ("suchbegriff Field required") while the
+    caller is looking at a `suchbegriff` it did pass, one level down in a
+    wrapper object. That answer is unactionable: one real session spent six
+    identical retries on it before abandoning the tool and drawing a wrong
+    conclusion about the library's holdings from the tool it fell back to.
+
+    Only a call in which *nothing* matches is reported here — as soon as one
+    argument fits, pydantic's own message is the more precise one.
+    """
+    if not isinstance(arguments, dict) or not arguments:
+        return None
+
+    manager = getattr(mcp, "_tool_manager", None)
+    try:
+        tool = manager.get_tool(name) if manager else None
+    except Exception:
+        return None
+    expected = set((getattr(tool, "parameters", None) or {}).get("properties", {}))
+    if not expected:
+        return None
+
+    passed = set(arguments)
+    if passed & expected:
+        return None
+
+    return (
+        f"{name} has no parameter named {', '.join(sorted(passed))}. "
+        f"It takes: {', '.join(sorted(expected))}. Pass them flat, not wrapped "
+        f"in an object. If this client cached an older tool list, remove the "
+        f"connector and add it again."
+    )
+
+
+def _install_argument_mismatch_hint() -> None:
+    """Answer a schema mismatch with something the caller can act on."""
+    manager = getattr(mcp, "_tool_manager", None)
+    if manager is None or not callable(getattr(manager, "call_tool", None)):
+        logger.warning(
+            "Tool manager has no call_tool(); argument mismatches stay unexplained")
+        return
+
+    original = manager.call_tool
+
+    async def call_tool(name, arguments, *args, **kwargs):
+        hint = _argument_mismatch(name, arguments)
+        if hint:
+            raise ToolError(hint)
+        return await original(name, arguments, *args, **kwargs)
+
+    manager.call_tool = call_tool
+
+
 def _warn_about_unknown_enabled_tools() -> None:
     """Report allowlist entries that match no tool.
 
@@ -1447,6 +923,7 @@ def _warn_about_unknown_enabled_tools() -> None:
 
 
 _compact_tool_schemas()
+_install_argument_mismatch_hint()
 
 if _enabled_tools:
     _warn_about_unknown_enabled_tools()

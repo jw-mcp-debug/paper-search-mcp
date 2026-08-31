@@ -45,7 +45,7 @@ class TestToolAllowlist(unittest.TestCase):
         names = {t.name for t in asyncio.run(module.mcp.list_tools())}
         self.assertGreater(len(names), len(BHT_TOOLS))
         self.assertIn("search_arxiv", names)
-        self.assertIn("download_with_fallback", names)
+        self.assertIn("search_crossref", names)
 
     def test_whitespace_and_empty_entries_are_tolerated(self):
         module = _reload_with_allowlist(" search_papers , ,opac_suche ")

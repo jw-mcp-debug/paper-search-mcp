@@ -213,6 +213,12 @@ request per 50 distinct journals.
 Reflects verified live-integration results. Columns show the highest capability level
 observed under normal conditions.
 
+**Download and Read describe the platform classes in `academic_platforms/`, not
+tools.** Since 0.7.0 the server exposes no `download_*` or `read_*` tools; full
+text is obtained through the library's own routes. The columns stay because
+`search_papers` relies on the same classes and their reachability is what the
+table records.
+
 | Platform | Search | Download | Read | Notes |
 |---|---|---|---|---|
 | arXiv | ✅ | ✅ | ✅ | Open API; reliable |
@@ -272,8 +278,8 @@ without the variable is unaffected.
 
 This is a token measure, not a feature switch. The tool list is part of **every**
 request a client sends, whether it does research in that turn or not. The full set
-of 56 tools costs about 14,600 tokens per request; the seven the BHT research skill
-actually calls cost about 2,900:
+of 28 tools costs about 7,900 tokens per request; the eight the BHT research skill
+actually calls cost about 3,400:
 
 ```
 PAPER_SEARCH_MCP_ENABLED_TOOLS=opac_suche,opac_autor_suche,opac_isbn_suche,kobv_verbund_suche,search_papers,paper_referenzen,paper_zitiert_von,zeitschrift_profil
