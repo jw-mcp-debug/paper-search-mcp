@@ -98,9 +98,11 @@ can retrieve it.
 - **BHT holdings filter**: catalog searches are filtered to the BHT stock via
   ISIL `DE-B768` (Bib-1 attribute 1044), with an option to widen to the full KOBV
   union catalog for interlibrary loan.
-- **Multi-source paper coverage**: arXiv, PubMed, bioRxiv, medRxiv, IACR ePrint,
-  Semantic Scholar, Crossref, OpenAlex, PMC, CORE, Europe PMC, dblp, OpenAIRE,
-  DOAJ, BASE, Zenodo, HAL, Unpaywall (DOI lookup).
+- **Multi-source paper coverage**: arXiv, PubMed, IACR ePrint, Semantic Scholar,
+  Crossref, OpenAlex, PMC, CORE, Europe PMC, dblp, OpenAIRE, DOAJ, BASE, Zenodo,
+  HAL, Unpaywall (DOI lookup). bioRxiv and medRxiv are opt-in: they list a
+  category, they do not search — Europe PMC indexes their preprints and searches
+  them by keyword.
 - **Standardized output**: papers are returned in a consistent dictionary format.
 - **Remote-ready transport**: runs over streamable-HTTP, deployable as a single
   always-on endpoint and added to Claude as one custom connector.
@@ -114,14 +116,19 @@ The catalog tools query the KOBV Z39.50 server and parse MARC21 records.
 - **Z39.50 host**: `z3950.kobv.de:210`, database `k2`
 - **BHT holdings filter**: ISIL `DE-B768` via Bib-1 attribute `1044`
 - **Record format**: MARC21 → parsed to title, authors, publisher, year, edition,
-  ISBN, extent, language, call number (Signatur), subject headings, PPN
+  ISBN, extent, language, call number (Signatur), subject headings, PPN, plus the
+  full-text link (856), licence (540) and carrier (008/007/338)
+- **Holdings label**: every hit states its availability — held by the BHT, licensed
+  for the BHT, free full text, licensed e-resource not held, union catalogue only,
+  or holdings unclear. Interlibrary loan is only offered where it is possible: not
+  for e-resources, which are not loanable, and not for free full texts.
 
 | Tool | Purpose |
 |---|---|
 | `opac_suche` | General catalog search. Default filtered to BHT holdings (`nur_bht_bestand=true`). `suchtyp`: `subject` (controlled vocabulary, most precise), `any`, `title`, `author`. |
 | `opac_autor_suche` | All works by a given author held by the BHT. |
 | `opac_isbn_suche` | Availability check by ISBN; checks BHT first, then the union catalog with a Fernleihe note. |
-| `kobv_verbund_suche` | Full KOBV union catalog (all Berlin-Brandenburg libraries), no BHT filter — for interlibrary loan. |
+| `kobv_verbund_suche` | Full KOBV union catalog (all Berlin-Brandenburg libraries), no BHT filter — for interlibrary loan. BHT holdings are still marked. |
 
 > Search tip: for topic searches, `suchtyp="subject"` is markedly more precise than
 > `"any"` because it uses the GND controlled vocabulary. Results are not relevance-
@@ -223,8 +230,8 @@ table records.
 |---|---|---|---|---|
 | arXiv | ✅ | ✅ | ✅ | Open API; reliable |
 | PubMed | ✅ | ❌ | ⚠️ info-only | Open API; reliable |
-| bioRxiv | ✅ | ✅ | ✅ | Open API; reliable |
-| medRxiv | ✅ | ✅ | ✅ | Open API; reliable |
+| bioRxiv | ⚠️ category listing | ✅ | ✅ | No search API: only an exact category name filters. Opt-in, not in `sources="all"` |
+| medRxiv | ⚠️ category listing | ✅ | ✅ | Same API as bioRxiv, same limitation |
 | IACR | ✅ | ✅ | ✅ | Open API; reliable |
 | Semantic Scholar | ✅ | ✅ (OA) | ✅ (OA) | Works without key (rate-limited); key improves limits |
 | Crossref | ✅ | ❌ | ⚠️ info-only | Open API; reliable |

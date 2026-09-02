@@ -31,7 +31,7 @@ services:
   - type: web
     name: paper-search-mcp-candidate
     runtime: python
-    branch: work/v0.7.0-opac-blocksuche
+    branch: work/v0.7.1-bestandslabel
     region: frankfurt
     plan: free
     buildCommand: bash setup.sh
