@@ -142,8 +142,6 @@ async def _run_search_with_timeout(source_name: str, search_task):
 ALL_SOURCES = [
     "arxiv",
     "pubmed",
-    "biorxiv",
-    "medrxiv",
     "iacr",
     "semantic",
     "crossref",
@@ -158,6 +156,19 @@ ALL_SOURCES = [
     "zenodo",
     "hal",
     "unpaywall",
+]
+
+# Quellen, die nur auf ausdrückliche Nennung suchen. bioRxiv und medRxiv haben
+# keine Stichwortsuche: ihre API filtert über exakte Kategorienamen und
+# ignoriert alles andere stillschweigend. Die Aggregation reicht aber den
+# Suchbegriff des Aufrufenden durch, nicht einen Kategorienamen — in
+# sources="all" lieferten die beiden deshalb verlässlich die zuletzt
+# eingestellten Preprints, ausgewiesen als Treffer zur Anfrage. Als
+# Kategorieliste sind sie weiter brauchbar, nur eben nicht als Suche.
+# Preprints beider Server sind über europepmc stichwortsuchbar.
+OPT_IN_SOURCES = [
+    "biorxiv",
+    "medrxiv",
 ]
 
 
@@ -191,7 +202,8 @@ def _parse_sources(sources: str) -> List[str]:
         return ALL_SOURCES
 
     normalized = [part.strip().lower() for part in sources.split(",") if part.strip()]
-    return [source for source in normalized if source in ALL_SOURCES]
+    waehlbar = ALL_SOURCES + OPT_IN_SOURCES
+    return [source for source in normalized if source in waehlbar]
 
 
 _TITLE_NOISE = re.compile(r"[^a-z0-9 ]+")
@@ -298,8 +310,10 @@ async def search_papers(
         query: Search query string.
         max_results_per_source: Max results to fetch from each selected source.
         sources: Comma-separated source names or 'all'.
-            Available: arxiv,pubmed,biorxiv,medrxiv,iacr,semantic,crossref,openalex,pmc,core,europepmc,dblp,openaire,doaj,base,zenodo,hal,unpaywall
+            Available: arxiv,pubmed,iacr,semantic,crossref,openalex,pmc,core,europepmc,dblp,openaire,doaj,base,zenodo,hal,unpaywall
             (ieee and acm are added automatically when their API keys are configured)
+            biorxiv and medrxiv only on explicit request: they list a category,
+            they do not search, and europepmc indexes their preprints
         year: Optional year filter for Semantic Scholar only.
         abstract_chars: Truncate abstracts to this many characters; 0 keeps them
             in full, which is what harvesting search terms from abstracts needs.
@@ -442,14 +456,16 @@ async def search_pubmed(query: str, max_results: int = 10, sort: str = 'relevanc
 
 @mcp.tool()
 async def search_biorxiv(query: str, max_results: int = 10) -> List[Dict]:
-    """Search academic papers from bioRxiv.
+    """List bioRxiv preprints of one category from the last 30 days.
 
-    Note: bioRxiv API filters by category name within the last 30 days, not full-text
-    keyword search. Use a category keyword such as 'bioinformatics', 'neuroscience',
-    'cell biology', etc.
+    This is not a keyword search — bioRxiv has no search API. Only an exact
+    category name filters ('bioinformatics', 'neuroscience', 'cell biology', …);
+    anything else is reported as no category, with the categories currently
+    available. For a keyword search over bioRxiv preprints use search_papers
+    with sources='europepmc', which indexes them. Not part of sources='all'.
 
     Args:
-        query: Category name to filter by (e.g., 'bioinformatics', 'neuroscience').
+        query: Category name (e.g., 'bioinformatics', 'neuroscience').
         max_results: Maximum number of papers to return (default: 10).
     Returns:
         List of paper metadata in dictionary format.
@@ -460,11 +476,14 @@ async def search_biorxiv(query: str, max_results: int = 10) -> List[Dict]:
 
 @mcp.tool()
 async def search_medrxiv(query: str, max_results: int = 10) -> List[Dict]:
-    """Search academic papers from medRxiv.
+    """List medRxiv preprints of one category from the last 30 days.
 
-    Note: medRxiv API filters by category name within the last 30 days, not full-text
-    keyword search. Use a category keyword such as 'infectious_diseases',
-    'cardiovascular_medicine', 'oncology', etc.
+    This is not a keyword search — medRxiv has no search API. Only an exact
+    category name filters ('infectious_diseases', 'cardiovascular_medicine',
+    'oncology', …); anything else is reported as no category, with the
+    categories currently available. For a keyword search over medRxiv preprints
+    use search_papers with sources='europepmc', which indexes them. Not part of
+    sources='all'.
 
     Args:
         query: Category name to filter by (e.g., 'infectious_diseases', 'oncology').
