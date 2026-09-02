@@ -54,6 +54,13 @@ Beschreibungen sind unverändert — der Connector muss nicht neu geladen werden
   Verweis auf `europepmc`. **Es geht keine Abdeckung verloren:** Europe PMC
   indexiert die Preprints beider Server und sucht sie per Stichwort; der
   bioRxiv-Preprint aus dem Zufallsbefund oben ist dort auf Platz 1 auffindbar.
+- **`mcp[cli]` ist auf `<2` begrenzt.** Die Abhängigkeit hatte keine
+  Obergrenze. mcp 2.x hat `FastMCP` zu `MCPServer` umbenannt und
+  `mcp.server.fastmcp` entfernt — ein frisches Setup installierte damit eine
+  Version, unter der `server.py` nicht einmal importiert. Sichtbar wurde das
+  erst in der CI: eine gewachsene Arbeitsumgebung hat 1.x längst liegen und
+  merkt nichts davon. Die Grenze fällt, wenn der Server auf `MCPServer`
+  umgestellt ist.
 - **Der Fernleih-Nachsatz hängt an einer Prüfung** statt unbedingt angehängt zu
   werden: E-Ressourcen sind nicht fernleihfähig, frei zugängliche Volltexte
   braucht niemand zu bestellen, der eigene Bestand schon gar nicht. Enthält die

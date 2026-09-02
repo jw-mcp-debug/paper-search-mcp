@@ -2,7 +2,12 @@ requests
 feedparser
 fastmcp
 pypdf
-mcp[cli]>=1.6.0
+# mcp 2.x hat FastMCP zu MCPServer umbenannt und mcp.server.fastmcp
+# entfernt; server.py importiert von dort. Ohne Obergrenze installiert
+# ein frisches Setup 2.x und der Import scheitert beim Start — die
+# Arbeitsumgebung merkt davon nichts, weil dort 1.x schon liegt.
+# Die Grenze fällt, wenn der Server auf MCPServer umgestellt ist.
+mcp[cli]>=1.6.0,<2
 beautifulsoup4>=4.12.0
 lxml>=4.9.0
 httpx[socks]>=0.28.1
