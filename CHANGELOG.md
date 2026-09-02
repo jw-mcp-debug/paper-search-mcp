@@ -15,6 +15,99 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > names, parameters, and result formats may still change between minor versions.
 
 ---
+## [0.7.1] – 2026-09-02
+
+Jeder Katalogtreffer sagt jetzt, wie er zu bekommen ist: im BHT-Bestand, frei im
+Netz, lizenzpflichtige E-Ressource oder Fernleihfall. Fernleihe wird nur noch
+dort angeboten, wo sie überhaupt möglich ist. Und die Sammelsuche mischt keine
+zufälligen Preprints mehr unter die Treffer.
+
+**Upgrading:** nichts zu tun. Die Tool-Liste, die Parameter und ihre
+Beschreibungen sind unverändert — der Connector muss nicht neu geladen werden.
+
+### Fixed
+
+- **Ein Treffer konnte ganz ohne Bestandszeile erscheinen.** `bht_bestand` wurde
+  auf `None` gesetzt und ausschließlich auf `True` — der Zweig für `False` in der
+  Ausgabe war toter Code und hat nie ausgelöst. Darunter stand trotzdem ein
+  pauschaler Nachsatz, der Fernleihe bewarb. Eine fehlende Angabe plus stehende
+  Werbung liest sich wie eine Auskunft: bestellen. In einer echten Sitzung ist
+  genau das passiert.
+- **In der Verbundsuche wurde Bestand grundsätzlich nicht erkannt.**
+  `kobv_verbund_suche` ruft ohne ISIL auf, und dasselbe `isil` steuerte bis in
+  den MARC-Parser hinein die 924-Auswertung. Auch ein Titel, den die BHT im
+  Regal hat, erschien dort ohne Nachweis — mit demselben Fernleih-Nachsatz
+  darunter. Das ist die teure Richtung des Fehlers, weil sie Bestellungen für
+  vorhandene Bücher auslöst. Suchfilter (`isil`) und Bestandsauswertung
+  (`bestand_isil`, Vorgabe BHT) sind jetzt getrennt.
+- **bioRxiv und medRxiv lieferten in der Sammelsuche Zufallstreffer.** Beide
+  APIs kennen keine Stichwortsuche; sie filtern über exakte Kategorienamen und
+  ignorieren alles andere stillschweigend. `search_papers` reicht aber den
+  Suchbegriff des Aufrufenden durch, nicht einen Kategorienamen — gemessen:
+  `machine learning` und `voelliger unsinn xyz` ergaben dieselben fünf Sätze,
+  schlicht die zuletzt eingestellten Preprints, ausgewiesen als Treffer zur
+  Anfrage. Beide sind deshalb aus `ALL_SOURCES` genommen und laufen nur noch auf
+  ausdrückliche Nennung (`sources="biorxiv"`), wo die Kategorieabfrage
+  funktioniert. Zusätzlich filtert der Client die Kategorie selbst nach, statt
+  dem Serverfilter zu glauben, und ein Begriff, der keine Kategorie ist, wird
+  gemeldet — mit der Liste der tatsächlich vorhandenen Kategorien und dem
+  Verweis auf `europepmc`. **Es geht keine Abdeckung verloren:** Europe PMC
+  indexiert die Preprints beider Server und sucht sie per Stichwort; der
+  bioRxiv-Preprint aus dem Zufallsbefund oben ist dort auf Platz 1 auffindbar.
+- **`mcp[cli]` ist auf `<2` begrenzt.** Die Abhängigkeit hatte keine
+  Obergrenze. mcp 2.x hat `FastMCP` zu `MCPServer` umbenannt und
+  `mcp.server.fastmcp` entfernt — ein frisches Setup installierte damit eine
+  Version, unter der `server.py` nicht einmal importiert. Sichtbar wurde das
+  erst in der CI: eine gewachsene Arbeitsumgebung hat 1.x längst liegen und
+  merkt nichts davon. Die Grenze fällt, wenn der Server auf `MCPServer`
+  umgestellt ist.
+- **Der Fernleih-Nachsatz hängt an einer Prüfung** statt unbedingt angehängt zu
+  werden: E-Ressourcen sind nicht fernleihfähig, frei zugängliche Volltexte
+  braucht niemand zu bestellen, der eigene Bestand schon gar nicht. Enthält die
+  Liste keinen Fernleihfall, sagt der Nachsatz das, statt zu werben. Betrifft
+  `kobv_verbund_suche` und den Verbund-Zweig von `opac_isbn_suche`.
+
+### Added
+
+- **Ein Bestandslabel für jeden Treffer**, auch für den unklaren Fall: ✅ im
+  BHT-Bestand bzw. für die BHT lizenziert, 🌐 frei zugänglicher Volltext, 🔒
+  lizenzpflichtige E-Ressource ohne BHT-Nachweis (nicht fernleihfähig), ℹ️ nur
+  im Verbund (→ Fernleihe), ❔ kein Besitznachweis im Datensatz. `False` wird
+  nur noch vergeben, wenn 924-Felder vorhanden sind und keines passt — fehlt 924
+  ganz, bleibt es bei „ungeklärt". „Unbekannt" und „nicht vorhanden" dürfen
+  nicht dasselbe Label bekommen, sonst wird aus einer Lücke im Datensatz eine
+  Bestellung.
+- **Volltextlink, Lizenz und Trägerform aus dem MARC-Satz.** Der Datensatz kam
+  die ganze Zeit vollständig an — 856, 540, Leader und 008 hat der Parser nur
+  nie angefasst; die Information lag im Speicher und wurde im Mapping verworfen.
+  Kein zusätzlicher Request nötig. 856 mit Negativliste auf `$3`, damit ein
+  Inhaltsverzeichnis nicht als Volltext ausgegeben wird, und mit `$z`/`$3` als
+  Nachweis freier Zugänglichkeit; 540 `$a`/`$u` als Lizenz; E-Ressourcen über
+  008/23, 007/00 und 338 `$b`.
+- **653 (freie Schlagwörter)** ergänzt 650/689. Bei Repositoriumssätzen ohne
+  GND-Erschließung ist das die einzige inhaltliche Angabe im Satz.
+- `tests/test_opac_bestand.py`: 23 netzfreie Fälle über synthetische MARC-Sätze,
+  darunter der vorher tote `False`-Zweig und „Inhaltsverzeichnis ist kein
+  Volltext".
+- `tests/test_biorxiv.py` neu geschrieben: netzfrei über eine gestellte
+  API-Antwort statt eines echten Downloads. Der alte Test prüfte
+  `download_pdf`/`read_paper` — die Oberfläche, die 0.7.0 als Tools entfernt hat
+  — und scheiterte zuverlässig an `os.rmdir("./downloads")`, weil dort PDFs
+  anderer Testläufe liegen.
+
+### Beispiel
+
+Der Forschungsbericht *Kohlenstoff in versiegelten und entsiegelten Böden in
+Berlin* (edoc HU Berlin, 2023) hatte weder Bestandszeile noch Link noch Lizenz —
+nur den Fernleih-Nachsatz darunter. Jetzt:
+
+```
+**Lizenz:** (CC BY-SA 4.0) Attribution-ShareAlike 4.0 International · …
+**Bestand:** 🌐 Frei zugänglicher Volltext – keine Ausleihe nötig
+**Volltext:** [frei zugänglich](http://edoc.hu-berlin.de/18452/27457)
+```
+
+---
 ## [0.7.0] – 2026-08-29
 
 Die Katalogsuche versteht Konzepte und ihre Synonyme in einer Anfrage, die

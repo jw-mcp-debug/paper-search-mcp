@@ -41,6 +41,48 @@ def _opac_link(isbn: str) -> str:
     )
 
 
+def ist_fernleihkandidat(treffer: dict) -> bool:
+    """Lohnt für diesen Treffer eine Fernleihe?
+
+    Nein für alles, was die BHT besitzt, für frei zugängliche Volltexte und
+    für lizenzpflichtige E-Ressourcen — die sind nicht fernleihfähig. Bei
+    fehlendem Bestandsnachweis (`None`) bleibt es beim Kandidaten, weil ein
+    unklarer Datensatz kein Nachweis der Nichtverfügbarkeit ist.
+    """
+    if treffer.get("bht_bestand") is True:
+        return False
+    if treffer.get("volltext_frei") or treffer.get("ist_online"):
+        return False
+    return True
+
+
+def _bestandszeile(treffer: dict) -> str:
+    """Ein Bestandslabel für jeden Treffer — auch für den unklaren Fall.
+
+    Vorher konnte die Zeile ganz fehlen; wo nichts steht, liest das Modell
+    den pauschalen Fernleih-Nachsatz als Antwort und schickt Bestellungen für
+    Bücher los, die im eigenen Regal stehen.
+    """
+    bestand = treffer.get("bht_bestand")
+    online  = treffer.get("ist_online")
+    frei    = treffer.get("volltext_frei")
+
+    if frei and bestand is True:
+        return "**Bestand:** 🌐 Frei im Netz · ✅ zusätzlich im BHT-Bestand"
+    if frei:
+        return "**Bestand:** 🌐 Frei zugänglicher Volltext – keine Ausleihe nötig"
+    if bestand is True:
+        return ("**Bestand:** ✅ Für die BHT lizenziert (E-Ressource)" if online
+                else "**Bestand:** ✅ In der BHT-Bibliothek vorhanden")
+    if online:
+        return ("**Bestand:** 🔒 Lizenzpflichtige E-Ressource, für die BHT nicht "
+                "nachgewiesen (nicht fernleihfähig)")
+    if bestand is False:
+        return ("**Bestand:** ℹ️ Nicht in der BHT, im Verbund nachgewiesen "
+                "(→ Fernleihe möglich)")
+    return "**Bestand:** ❔ Kein Besitznachweis im Datensatz – Bestand ungeklärt"
+
+
 def _formatiere_treffer(treffer: dict, nummer: int) -> str:
     """Formatiert einen einzelnen Treffer als Markdown-Block."""
     autoren_str = " / ".join(treffer.get("autoren", ["(kein Autor)"]))
@@ -67,11 +109,17 @@ def _formatiere_treffer(treffer: dict, nummer: int) -> str:
         ppn = treffer["ppn"].replace("(DE-599)", "").strip()
         zeilen.append(f"**PPN:** `{ppn}`")
 
-    # Bestandshinweis
-    if treffer.get("bht_bestand") is True:
-        zeilen.append("**Bestand:** ✅ In der BHT-Bibliothek vorhanden")
-    elif treffer.get("bht_bestand") is False:
-        zeilen.append("**Bestand:** ℹ️ Nur im Verbund (→ Fernleihe möglich)")
+    if treffer.get("lizenz"):
+        zeilen.append(f"**Lizenz:** {treffer['lizenz']}")
+
+    zeilen.append(_bestandszeile(treffer))
+
+    # Volltextlink aus 856 – ohne ihn bleibt bei Online-Sätzen ohne ISBN
+    # (Repositorien, E-Books) überhaupt kein Weg zum Werk übrig.
+    if treffer.get("volltext_url"):
+        marke = ("frei zugänglich" if treffer.get("volltext_frei")
+                 else "Zugang ggf. lizenzpflichtig")
+        zeilen.append(f"**Volltext:** [{marke}]({treffer['volltext_url']})")
 
     # Kompakter Deep-Link in den lokalen BHT-webOPAC (Signatur & Verfügbarkeit).
     if treffer.get("isbn"):
@@ -268,13 +316,22 @@ def register_opac_tools(mcp):
             ergebnis = _formatiere_ergebnisse(
                 daten_verbund, f"ISBN: {isbn}", "KOBV-Verbund"
             )
+            # Auch hier gilt: nicht jeder Verbundtreffer ist ein Fernleihfall.
+            # Ein frei zugänglicher oder rein elektronischer Titel wird nicht
+            # bestellt, sondern aufgerufen.
+            nachsatz = (
+                "\n\n---\n**Fernleihe:** Über das "
+                "[KOBV-Portal](https://portal.kobv.de) bestellbar."
+                if any(ist_fernleihkandidat(t)
+                       for t in daten_verbund.get("treffer", []))
+                else ""
+            )
             return (
                 f"## ISBN {isbn} – Nicht im BHT-Bestand\n\n"
                 f"Dieses Werk ist **nicht** in der BHT-Bibliothek vorhanden, "
                 f"aber im KOBV-Verbund nachgewiesen:\n\n"
                 + ergebnis
-                + "\n\n---\n**Fernleihe:** Über das "
-                "[KOBV-Portal](https://portal.kobv.de) bestellbar."
+                + nachsatz
             )
 
         return (
@@ -367,14 +424,30 @@ def register_opac_tools(mcp):
         daten = await suche_bht(
             use_attr=use_attr,
             term=suchbegriff,
-            isil=None,   # kein ISIL-Filter = gesamter Verbund
+            isil=None,          # kein ISIL-Filter = gesamter Verbund
+            bestand_isil=BHT_ISIL,  # Besitznachweis trotzdem auswerten
             max_records=max_treffer,
         )
 
         ergebnis = _formatiere_ergebnisse(daten, suchbegriff, "KOBV-Verbund")
-        return (
-            ergebnis
-            + "\n\n---\n*Titel, die nicht in der BHT sind, können per "
-            "**Fernleihe** bestellt werden: "
-            "[KOBV-Portal Fernleihe](https://portal.kobv.de)*"
-        )
+
+        # Der Nachsatz wurde bisher unbedingt angehängt und bewarb Fernleihe
+        # auch für Titel, die im BHT-Regal stehen. Er erscheint jetzt nur noch,
+        # wenn die Liste tatsächlich einen Fernleihfall enthält.
+        treffer_liste = daten.get("treffer", [])
+        kandidaten = [t for t in treffer_liste if ist_fernleihkandidat(t)]
+        if kandidaten:
+            return (
+                ergebnis
+                + f"\n\n---\n*{len(kandidaten)} der angezeigten Treffer sind "
+                "nicht in der BHT und können per **Fernleihe** bestellt werden: "
+                "[KOBV-Portal Fernleihe](https://portal.kobv.de)*"
+            )
+        if treffer_liste:
+            return (
+                ergebnis
+                + "\n\n---\n*Keine Fernleihe nötig: Die angezeigten Treffer sind "
+                "im BHT-Bestand, frei im Netz oder nicht fernleihfähige "
+                "E-Ressourcen.*"
+            )
+        return ergebnis

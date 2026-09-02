@@ -16,72 +16,110 @@ class BioRxivSearcher(PaperSource):
         self.timeout = 30
         self.max_retries = 3
 
+    # Die API kennt keine Stichwortsuche. Sie filtert über exakte
+    # Kategorienamen und ignoriert alles andere stillschweigend: für
+    # "machine learning" kamen dieselben Sätze zurück wie für "blubb xyz" —
+    # schlicht die zuletzt eingestellten Preprints, ausgewiesen als Treffer
+    # zur Anfrage. Deshalb wird hier zusätzlich clientseitig gefiltert, und
+    # ein Begriff, der keine Kategorie ist, wird als solcher gemeldet, statt
+    # Zufallstreffer auszuliefern.
+    MAX_SEITEN = 10
+
     def search(self, query: str, max_results: int = 10, days: int = 30) -> List[Paper]:
         """
-        Search for papers on bioRxiv by category within the last N days.
+        List bioRxiv papers of a category posted within the last N days.
+
+        This is a category listing, not a keyword search: bioRxiv offers no
+        full-text search API. A query that names no category raises ValueError
+        naming the categories actually seen — for a keyword search over
+        bioRxiv preprints use Europe PMC, which indexes them.
 
         Args:
-            query: Category name to search for (e.g., "cell biology").
+            query: Category name (e.g., "cell biology"); spaces and case are
+                normalised.
             max_results: Maximum number of papers to return.
             days: Number of days to look back for papers.
 
         Returns:
-            List of Paper objects matching the category within the specified date range.
+            List of Paper objects of that category within the date range.
+
+        Raises:
+            ValueError: The query names no bioRxiv category.
         """
-        # Calculate date range: last N days
         end_date = datetime.now().strftime('%Y-%m-%d')
         start_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
-        
-        # Format category: lowercase and replace spaces with underscores
-        category = query.lower().replace(' ', '_')
-        
+
+        category = query.strip().lower().replace(' ', '_')
+
         papers = []
+        gesehene_kategorien = set()
         cursor = 0
-        while len(papers) < max_results:
+
+        for _ in range(self.MAX_SEITEN):
             url = f"{self.BASE_URL}/{start_date}/{end_date}/{cursor}"
             if category:
                 url += f"?category={category}"
-            tries = 0
-            while tries < self.max_retries:
+
+            collection = self._hole_seite(url)
+            if collection is None:
+                break
+
+            for item in collection:
+                item_kategorie = (item.get('category') or '').lower().replace(' ', '_')
+                gesehene_kategorien.add(item_kategorie)
+                # Der Serverfilter wird nicht auf Treu und Glauben geglaubt:
+                # kommt eine fremde Kategorie zurück, hat er nicht gegriffen.
+                if category and item_kategorie != category:
+                    continue
                 try:
-                    response = self.session.get(url, timeout=self.timeout)
-                    response.raise_for_status()
-                    data = response.json()
-                    collection = data.get('collection', [])
-                    for item in collection:
-                        try:
-                            date = datetime.strptime(item['date'], '%Y-%m-%d')
-                            papers.append(Paper(
-                                paper_id=item['doi'],
-                                title=item['title'],
-                                authors=item['authors'].split('; '),
-                                abstract=item['abstract'],
-                                url=f"https://www.biorxiv.org/content/{item['doi']}v{item.get('version', '1')}",
-                                pdf_url=f"https://www.biorxiv.org/content/{item['doi']}v{item.get('version', '1')}.full.pdf",
-                                published_date=date,
-                                updated_date=date,
-                                source="biorxiv",
-                                categories=[item['category']],
-                                keywords=[],
-                                doi=item['doi']
-                            ))
-                        except Exception as e:
-                            print(f"Error parsing bioRxiv entry: {e}")
-                    if len(collection) < 100:
-                        break  # No more results
-                    cursor += 100
-                    break  # Exit retry loop on success
-                except requests.exceptions.RequestException as e:
-                    tries += 1
-                    if tries == self.max_retries:
-                        print(f"Failed to connect to bioRxiv API after {self.max_retries} attempts: {e}")
-                        break
-                    print(f"Attempt {tries} failed, retrying...")
-            else:
-                continue
-            break
+                    date = datetime.strptime(item['date'], '%Y-%m-%d')
+                    papers.append(Paper(
+                        paper_id=item['doi'],
+                        title=item['title'],
+                        authors=item['authors'].split('; '),
+                        abstract=item['abstract'],
+                        url=f"https://www.biorxiv.org/content/{item['doi']}v{item.get('version', '1')}",
+                        pdf_url=f"https://www.biorxiv.org/content/{item['doi']}v{item.get('version', '1')}.full.pdf",
+                        published_date=date,
+                        updated_date=date,
+                        source="biorxiv",
+                        categories=[item['category']],
+                        keywords=[],
+                        doi=item['doi']
+                    ))
+                except Exception as e:
+                    print(f"Error parsing bioRxiv entry: {e}")
+
+            if category and not papers and gesehene_kategorien:
+                bekannt = ", ".join(sorted(k for k in gesehene_kategorien if k))
+                raise ValueError(
+                    f"'{query}' ist keine bioRxiv-Kategorie. bioRxiv bietet keine "
+                    f"Stichwortsuche, nur Kategorielisten; in den letzten {days} "
+                    f"Tagen kamen diese Kategorien vor: {bekannt}. Für eine "
+                    f"Stichwortsuche über bioRxiv-Preprints europepmc verwenden, "
+                    f"das sie indexiert."
+                )
+
+            if len(collection) < 100 or len(papers) >= max_results:
+                break
+            cursor += 100
 
         return papers[:max_results]
+
+    def _hole_seite(self, url: str):
+        """Holt eine Ergebnisseite; None, wenn die API nicht antwortet."""
+        for versuch in range(1, self.max_retries + 1):
+            try:
+                response = self.session.get(url, timeout=self.timeout)
+                response.raise_for_status()
+                return response.json().get('collection', [])
+            except requests.exceptions.RequestException as e:
+                if versuch == self.max_retries:
+                    print(f"Failed to connect to bioRxiv API after "
+                          f"{self.max_retries} attempts: {e}")
+                    return None
+                print(f"Attempt {versuch} failed, retrying...")
+        return None
 
     def download_pdf(self, paper_id: str, save_path: str) -> str:
         """
