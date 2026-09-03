@@ -117,9 +117,13 @@ Anweisungen und gehören nicht in die Antwort.
 
 ## Ablauf
 
-Vorab das Thema schärfen, falls zu breit oder vage (Fachgebiet? Grundlagen oder
-aktueller Forschungsstand? Deutsch- oder englischsprachige Literatur?). Bei klarem
-Auftrag direkt loslegen.
+**Nachfragen nur in zwei Fällen:** Aus dem Auftrag ist kein Fachgebiet erkennbar,
+oder es lassen sich keine zwei Suchblöcke bilden. Dann genau eine Rückfrage stellen
+(Fachgebiet? Grundlagen oder aktueller Forschungsstand? Deutsch- oder
+englischsprachige Literatur?) und die Antwort abwarten. In jedem anderen Fall ohne
+Rückfrage beginnen: Eine Rückfrage hält die gesamte Recherche an, und ein zu breites
+Thema lässt sich an der ersten Trefferlage besser einengen als an einer Vermutung
+vorab.
 
 Die Reihenfolge der Stufen ist **fest**: Begriffstabelle vor der ersten Suche, dann
 Katalog, dann Paper, dann Synthese, dann Vorschläge. Die Tabelle ist die Strategie,
