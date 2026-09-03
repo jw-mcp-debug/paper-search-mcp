@@ -1,201 +1,278 @@
 ---
 name: agentische-recherche
-description: "Mehrstufige wissenschaftliche Literaturrecherche an der BHT, die den Rechercheprozess sichtbar macht. Durchsucht zuerst den BHT-Bibliothekskatalog (OPAC/KOBV) nach Grundlagenliteratur, dann akademische Paper-Datenbanken nach aktueller Forschung, und fasst die Ergebnisse zusammen. Beide Quellen liegen auf einem Connector (paper-opac-search-mcp). Manuell auszulösen, z. B. mit 'mach eine agentische Recherche zu …', 'systematische Literaturrecherche zu …' oder 'recherchiere Literatur zu …'. Liefert Trefferlisten mit Quell-Links direkt im Chat; beschafft keine Volltexte."
+description: "Mehrstufige wissenschaftliche Literaturrecherche an der BHT, die den Rechercheprozess sichtbar macht: erst Suchbegriffstabelle, dann BHT-Bibliothekskatalog (OPAC/KOBV) für Grundlagen, dann Fachdatenbanken für aktuelle Forschung, dann Synthese. Unbedingt verwenden, sobald jemand nach Literatur, Quellen, Papers, Fachbüchern, einem Forschungsstand oder Material für eine Haus-, Bachelor- oder Masterarbeit fragt – auch wenn das Wort 'Recherche' gar nicht fällt. Typische Auslöser: 'recherchiere Literatur zu …', 'systematische Literaturrecherche zu …', 'was gibt es zu … in der Bibliothek'. Unterstützt Folgebefehle (Hotkeys): 'r' bzw. 'another round' für die nächste Suchrunde in Katalog und Fachdatenbanken, 'p' bzw. 'pearl' für die Begriffsernte aus den besten Treffern, 's' bzw. 'schneeball' für die Zitationsverfolgung rückwärts und vorwärts, 'a' für Autorensuche, 'w' breiter."
+user-invocable: true
+# Bewusst nur die Tools, die dieser Skill aufruft. Crossref, Semantic Scholar,
+# CORE und die übrigen Quellen brauchen KEINEN eigenen Eintrag: Sie sind Werte
+# des sources-Parameters von search_papers, keine eigenen Aufrufe.
+# Die quellenspezifischen search_*-Tools bitte nicht wieder aufnehmen — der Skill
+# rät in Stufe 2 ausdrücklich davon ab, sie als Retry nach einem Nullbefund zu
+# verwenden, und die Allowlist ist die einzige harte Durchsetzung dieser Regel.
+# paper_referenzen/paper_zitiert_von: Zitationsverfolgung im s-Hotkey.
+# paper_verwandte bewusst NICHT gelistet — unzuverlässig (siehe p).
+# zeitschrift_profil: Kennzahlen einer Zeitschrift, nur auf Nachfrage.
+allowed-tools:
+  - opac_suche
+  - opac_autor_suche
+  - opac_isbn_suche
+  - kobv_verbund_suche
+  - search_papers
+  - paper_referenzen
+  - paper_zitiert_von
+  - zeitschrift_profil
 ---
 
 # Agentische Recherche (BHT Campusbibliothek)
 
 ## Zweck
 
-Dieser Skill bildet den professionellen Rechercheprozess einer wissenschaftlichen
-Bibliothek nach und macht ihn für die nutzende Person **transparent**. Statt einer
-Trefferliste aus einer einzelnen Quelle geht Claude in nachvollziehbaren Stufen
-vor und erklärt bei jeder Stufe knapp, *warum* sie kommt und *was* sie beiträgt –
-zuerst die Suchbegriffstabelle (Begriffsfeld), dann Katalog für Grundlagen,
-Fachdatenbanken für aktuelle Forschung, Synthese und schließlich konkrete
-Suchvorschläge für die nächste Runde.
+Dieser Skill bildet den Rechercheprozess einer wissenschaftlichen Bibliothek nach:
+erst die Suchbegriffstabelle, dann der Katalog für Grundlagen, dann Fachdatenbanken
+für aktuelle Forschung, dann Synthese und Vorschläge für die nächste Runde.
 
-Der didaktische Anspruch: Die Person soll die **Recherchetechnik** mitnehmen —
-Begriffsfeld systematisch entwickeln, Treffer auswerten, Begriffe nachschärfen,
-erneut suchen — nicht nur eine fertige Trefferliste erhalten.
+Die Person soll die **Recherchetechnik** mitnehmen — Begriffsfeld entwickeln,
+Treffer auswerten, Begriffe nachschärfen, erneut suchen. Das geschieht dadurch,
+dass jeder Schritt begründet ausgeführt wird, **nicht** dadurch, dass über die
+Methode gesprochen wird. Kündige das Vorgehen nie an und benenne es nie als solches.
 
-Alle Werkzeuge liegen auf **einem** MCP-Connector: `paper-opac-search-mcp`.
-Er vereint die OPAC-/KOBV-Tools (BHT-Bibliothekskatalog über Z39.50, gefiltert
-auf ISIL DE-B768) und die Paper-Suche über mehrere Datenbanken.
+**Was dieser Skill nicht leistet:** Er bewertet nicht die inhaltliche Qualität der
+Quellen. Stufe 3 ordnet die Trefferlage; Einordnung, Gewichtung und Argumentation
+in der eigenen Arbeit bleiben Aufgabe der nutzenden Person. Das gehört **nicht** in
+eine Vorrede — bring es erst dort an, wo es praktisch wird, in einem Nebensatz.
+
+Alle Werkzeuge liegen auf **einem** MCP-Connector: `paper-opac-search-mcp`. Er
+vereint die OPAC-/KOBV-Tools (BHT-Katalog über Z39.50, gefiltert auf ISIL DE-B768)
+und die Paper-Suche über mehrere Datenbanken.
 
 ## Grundprinzipien (Datenintegrität)
 
 - **Nur verwenden, was die Werkzeuge zurückgeben.** Jeder Titel, jede Autor*in,
-  jedes Jahr, jede Signatur, jeder Link muss aus einem Suchergebnis dieser
-  Sitzung stammen – nicht aus dem Trainingswissen, nicht erfunden.
-- **Links aus der Tool-Ausgabe immer übernehmen.** Der `[OPAC]`-Link und der
-  `**Volltext:**`-Link (Katalog) sowie die DOI/URL (Paper) sind der eigentliche
-  praktische Nutzen für die Person und dürfen bei der Synthese **nicht**
-  wegfallen. Jeder genannte Treffer trägt seinen klickbaren Link. Beim
-  Umschreiben der Trefferliste die Links mitführen, nicht durch interne IDs
-  (PPN) ersetzen. Ein Katalogtreffer ohne ISBN hat keinen `[OPAC]`-Link — trägt
-  er einen Volltextlink, ist das der einzige Weg zum Werk.
-- **Erst abwarten, dann weitergehen.** Eine Suche ist erst abgeschlossen, wenn
-  die Ergebnisse da sind und gesichtet wurden.
-- **Lücken offenlegen, nicht auffüllen.** Null Treffer wird gesagt, nicht durch
-  erfundene Einträge kaschiert.
+  jedes Jahr, jede Signatur, jeder Link muss aus einem Suchergebnis dieser Sitzung
+  stammen – nicht aus dem Trainingswissen, nicht erfunden.
+- **Jede Suchstufe endet mit ihrer Treffertabelle.** Stufe 1 und Stufe 2 sind erst
+  abgeschlossen, wenn die ausgewählten Treffer in der dort vorgegebenen Tabelle
+  ausgegeben wurden. Ohne sie hat die Person nichts in der Hand — die Tabelle ist
+  das Ergebnis, nicht die Zusammenfassung.
+- **Links aus der Tool-Ausgabe unverändert übernehmen.** Jeder genannte Treffer
+  trägt seinen Link; auch beim Umschreiben bleibt er erhalten, und interne IDs
+  (PPN) ersetzen ihn nie.
+- **Erst abwarten, dann weitergehen.** Eine Suche ist erst abgeschlossen, wenn die
+  Ergebnisse da sind und gesichtet wurden.
+- **Lücken offenlegen, nicht auffüllen.** Null Treffer wird gesagt — aber prüfe
+  vorher die Fehlermuster in Stufe 1 und 2: Die meisten Nullbefunde sind Vokabular-
+  oder Verfügbarkeitsprobleme, keine echten Lücken.
 - **OpenAIRE-DOIs vor dem Zitieren prüfen.** OpenAIRE verschmilzt beim eigenen
-  Dedup gelegentlich zwei verschiedene Werke zu einem Datensatz: DOI, URL und
-  Autor*innen können dann zu drei verschiedenen Arbeiten gehören. Ein
-  OpenAIRE-Treffer wird nur genannt, wenn der DOI zum Titel passt – im Zweifel
-  über eine zweite Quelle gegenprüfen. (Upstream-Problem, nicht im Server behebbar.)
-- **Keine Volltextbeschaffung.** Dieser Skill *findet* Literatur und liefert Links
-  zur Quelle; der Server stellt dafür auch keine Werkzeuge bereit. Den Volltext
-  erhält die Person über die legitimen Wege der Bibliothek (siehe Schlusshinweis).
+  Dedup gelegentlich zwei Werke zu einem Datensatz: DOI, URL und Autor*innen können
+  dann zu drei verschiedenen Arbeiten gehören. Im Zweifel über eine zweite Quelle
+  gegenprüfen. (Upstream-Problem, im Server nicht behebbar.)
+- **Keine Volltextbeschaffung.** Dieser Skill *findet* Literatur und liefert Links.
+  Er ruft **keine** Download-/Read-Werkzeuge auf (kein `download_*`, kein `read_*`).
+
+## Ausgabe-Regeln
+
+Die Ausgabe richtet sich an Studierende und Lehrende, nicht an ein System. Die
+technischen Details in diesem Skill (Toolnamen, Parameter, Suchtypen) sind interne
+Anweisungen und gehören nicht in die Antwort.
+
+- **Keine Werkzeug- oder Parameternamen.** Nicht `opac_suche(…, suchtyp="subject")`,
+  sondern „Schlagwortsuche im Katalog nach *Building Information Modeling*". Nicht
+  `nur_bht_bestand=false`, sondern „über den BHT-Bestand hinaus im KOBV-Verbund".
+- **Keine Codeblöcke, keine Backticks um Suchbegriffe.** Suchbegriffe kursiv oder in
+  Anführungszeichen.
+- **Keine internen IDs.** PPN, Work-IDs, Rückgabefeldnamen erscheinen nie in der
+  Ausgabe — auch nicht als vermeintliche Signatur (siehe Stufe 1).
+- **Datenbanknamen als Quellenzeile nennen** (Crossref, OpenAlex, Semantic Scholar,
+  DOAJ, CORE, arXiv, PubMed, BHT-webOPAC, KOBV) — verpflichtend direkt unter jeder
+  Trefferliste, nicht als Parameterliste. Grund: Lizenzpflicht aus dem Semantic
+  Scholar API License Agreement (§4 Attribution), auf die übrigen Quellen
+  ausgeweitet, damit die Regel einheitlich gilt.
+- **Keine Meta-Kommentare über das eigene Vorgehen.** Kein „bevor ich beginne,
+  möchte ich den Ansatz transparent machen", keine Erwähnung von Skill, Stufen,
+  Ansatz oder Didaktik als Begriffe. Was eine Stufe beiträgt, wird an der Sache
+  gesagt („Der Katalog liefert die Grundlagen — Lehrbücher und Handbücher"), nicht
+  als Ankündigung des Verfahrens.
+- **Keine Vorreden.** Der erste Satz gehört dem Thema der Person, nicht dem
+  Werkzeug. Kein „Gerne unterstütze ich Sie", keine Rollenzuschreibung.
+- **Quellenausfälle in Alltagssprache melden, aber melden.** Kein „HTTP 429" —
+  stattdessen „die Datenbank hat die Anfrage wegen zu vieler Zugriffe abgewiesen".
+- **Katalog-Links nach Herkunft bilden**, in dieser Reihenfolge:
+  1. Trägt der Treffer einen **Volltextlink**, ist das der Link.
+  2. Sonst, bei einem Treffer aus `opac_suche` mit `nur_bht_bestand=true`, den
+     `[OPAC]`-Link aus der Ausgabe übernehmen.
+  3. Sonst — Verbundtreffer ohne Volltext — den BHT-webOPAC-Link **verwerfen** (für
+     einen Titel, den die BHT nicht hat, führt er ins Leere) und den Titel
+     URL-kodiert in den KOBV-Portal-Endpunkt einsetzen:
+     `https://portal.kobv.de/KobvIndex/Results?lookfor={titel}&type=AllFields&limit=10`.
 
 ## Ablauf
 
-Vorab das Thema mit der Person schärfen, falls zu breit oder vage (Fachgebiet?
-Eher Grundlagen oder aktueller Forschungsstand? Deutsch- oder englischsprachige
-Literatur?). Bei klarem Auftrag direkt loslegen. Jede Stufe kurz ankündigen und
-ihren Beitrag in ein, zwei Sätzen erklären – das ist der sichtbare Prozess, aber
-ohne ihn zu zerreden.
+Vorab das Thema schärfen, falls zu breit oder vage (Fachgebiet? Grundlagen oder
+aktueller Forschungsstand? Deutsch- oder englischsprachige Literatur?). Bei klarem
+Auftrag direkt loslegen.
+
+Die Reihenfolge der Stufen ist **fest**: Begriffstabelle vor der ersten Suche, dann
+Katalog, dann Paper, dann Synthese, dann Vorschläge. Die Tabelle ist die Strategie,
+nicht die Nachbereitung. Innerhalb einer Stufe die Suchen **parallel** absetzen.
 
 ### Stufe 0 — Suchbegriffstabelle (Begriffsfeld erarbeiten)
 
-**Vor** der ersten Suche das Begriffsfeld sichtbar machen. Das ist die
-Recherchetechnik, die die Campusbibliothek in ihren Schulungen vermittelt
-(Blocksuche): Das Thema wird in 2–4 **Suchblöcke** (Facetten/Konzepte) zerlegt,
-und je Block werden Synonyme, Ober-/Unterbegriffe, Schreibvarianten und
-englische Entsprechungen gesammelt. Innerhalb eines Blocks gilt ODER, zwischen
-den Blöcken UND.
-
-Erstelle die Tabelle als Markdown, mit einer Zeile je Block:
+**Vor** der ersten Suche das Begriffsfeld sichtbar machen: Das Thema wird in 2–4
+**Suchblöcke** (Facetten) zerlegt, je Block Synonyme, Ober-/Unterbegriffe,
+Schreibvarianten und englische Entsprechungen. Innerhalb eines Blocks gilt ODER,
+zwischen den Blöcken UND — genau so nimmt der Katalog die Anfrage in Stufe 1
+entgegen.
 
 | Block | Deutsch | Englisch | Enger / Weiter |
 |---|---|---|---|
 | 1 (Konzept A) | Begriff, Synonym, Variante | term, synonym | enger: … / weiter: … |
 | 2 (Konzept B) | … | … | … |
 
-Hinweise zur Erstellung:
-- **2–4 Blöcke** genügen; mehr Blöcke verengen die Treffermenge zu stark.
+- **2–4 Blöcke** genügen; mehr verengen die Treffermenge zu stark.
 - Deutsche **und** englische Begriffe: Der Katalog ist überwiegend deutsch, die
-  Paper-Quellen überwiegend englisch — die Tabelle bedient beide Stufen.
-- Komposita und Wortvarianten mitdenken (z. B. „Gebäudeautomation" /
-  „Gebäudeautomatisierung"), da der KOBV-Zugang **keine Trunkierung** unterstützt.
-- Kontrolliertes Vokabular gehört in die deutsche Spalte, weil es die
-  GND-Schlagwortsuche in Stufe 1 speist.
+  Paper-Quellen überwiegend englisch.
+- **Komposita und Wortvarianten mitdenken** („Gebäudeautomation" /
+  „Gebäudeautomatisierung") — der Katalog kann keine Trunkierung (siehe Stufe 1).
+- Kontrolliertes Vokabular in die deutsche Spalte; es speist die GND-Schlagwortsuche
+  in Stufe 1.
+
+**Fachvokabular — Empfehlung an die Person, kein Arbeitsschritt.** Nenne bei
+einschlägigen Themen die passende Thesaurus-Quelle. Der Skill kann diese Thesauri
+**nicht** abfragen; behaupte nie, dort nachgesehen zu haben.
+
+| Fach | Kontrolliertes Vokabular |
+|---|---|
+| Medizin / Life Sciences | MeSH |
+| Psychologie | APA Thesaurus of Psychological Index Terms |
+| Pädagogik / Erziehungswissenschaft | ERIC Thesaurus |
+| Wirtschaftswissenschaften | STW / EconLit Subject Descriptors |
+| alle Fächer, Katalogseite | GND (im Katalogtreffer sichtbar) |
 
 Sage anschließend in einem Satz, **welche Begriffe** du für die erste Suche
-verwendest und warum — so bleibt die Strategie nachvollziehbar. Die Tabelle ist
-didaktisches Kernstück: Sie zeigt der Person, wie man Suchbegriffe systematisch
-entwickelt, statt nur ein Ergebnis zu konsumieren.
+verwendest und warum.
 
 ### Stufe 1 — OPAC (Grundlagenliteratur, BHT-Bestand)
 
-Der Katalog liefert die Grundlagen: Lehrbücher, Handbücher, etablierte Werke,
-vorrangig den an der BHT verfügbaren Bestand. Suchbegriffe stammen aus der
-Tabelle (Stufe 0), vorrangig aus der deutschen Spalte.
+Der Katalog liefert Lehrbücher, Handbücher, etablierte Werke, vorrangig den an der
+BHT verfügbaren Bestand. Suchbegriffe aus Stufe 0, vorrangig deutsche Spalte.
 
-- **Beginne mit der Schlagwortsuche:** `opac_suche` mit `suchtyp="subject"`,
-  `nur_bht_bestand=true`, `max_treffer` 12–15. Die Schlagwortsuche nutzt das
-  kontrollierte Vokabular (GND) und ist **deutlich präziser** als `"any"` –
-  empirisch bestätigt: Bei `"any"` mischen sich thematisch lose Treffer in die
-  vorderen Ränge, bei `"subject"` sind die vorderen Treffer durchgängig
-  einschlägig.
-- **Die Trefferliste ist NICHT relevanzsortiert** wie eine Discovery-Suche – die
-  angezeigten N sind schlicht die ersten N von vielen. Deshalb bewusst mehr
-  scannen (12–15) und die **einschlägigsten selbst auswählen**, statt die ersten
-  fünf zu übernehmen. Auswahlkriterien: Passung zum Thema (Titel + Schlagwörter),
-  aktuelle Auflagen, Lehrbuch/Handbuch vor enger Monografie.
-- **Die Suchbegriffstabelle als Blocksuche stellen:** Der Katalog sortiert
-  **nicht** nach Relevanz und verknüpft alle Wörter mit UND — jedes zusätzliche
-  Wort ist ein harter Filter, kein Ranking-Signal. Die Blöcke aus Stufe 0
-  deshalb als Blocksuche übergeben: `;` trennt Konzepte, ` OR ` deren Synonyme,
-  Anführungszeichen erzwingen eine Phrase:
+- **Beginne mit der Schlagwortsuche:** `opac_suche`, `suchtyp="subject"`,
+  `nur_bht_bestand=true`, `max_treffer` 12–15. Sie nutzt das kontrollierte
+  Vokabular (GND) und ist deutlich präziser als `"any"`, bei dem sich thematisch
+  lose Treffer in die vorderen Ränge mischen.
+- **Die Trefferliste ist nicht relevanzsortiert** — die angezeigten N sind die
+  ersten N von vielen. Deshalb 12–15 scannen und die einschlägigsten **selbst
+  auswählen**, statt die ersten fünf zu übernehmen. Kriterien: Passung von Titel
+  und Schlagwörtern, aktuelle Auflage, Lehrbuch/Handbuch vor enger Monografie.
 
-      KI OR "Künstliche Intelligenz"; Bildung OR Unterricht OR Hochschule
+**Die Blöcke aus Stufe 0 als Blocksuche übergeben.** Der Katalog kennt kein
+Relevanzranking und verknüpft alle Wörter mit UND — jedes zusätzliche Wort ist ein
+harter Filter. `opac_suche` und `kobv_verbund_suche` nehmen deshalb Konzepte und
+ihre Synonyme in **einer** Anfrage entgegen: `;` trennt die Konzepte (UND), ` OR `
+deren Synonyme (ODER), Anführungszeichen erzwingen eine Phrase.
 
-  **Höchstens zwei Konzepte pro Anfrage.** Drei sind für einen Katalog fast
-  immer zu eng — er indexiert Titel und Schlagwörter, keine Volltexte.
-  Synonyme dagegen kosten nichts: sie vergrößern die Treffermenge, statt sie
-  zu verkleinern. Deutsche und englische Fassung eines Konzepts gehören in
-  denselben Block.
+    KI OR "Künstliche Intelligenz"; Bildung OR Unterricht OR Hochschule
+
+- **Höchstens zwei Konzepte pro Anfrage.** Drei sind für einen Katalog fast immer
+  zu eng — er indexiert Titel und Schlagwörter, keine Volltexte. Synonyme dagegen
+  kosten nichts: Sie vergrößern die Treffermenge, statt sie zu verkleinern.
+- Deutsche und englische Fassung eines Konzepts gehören in denselben Block.
 - **Keine Trunkierung:** `*` und `?` wirken nicht — der Katalog liest sie als
-  Wortbestandteil, `Bildung*` findet also genau dasselbe wie `Bildung`.
-  Wortformen per ` OR ` ausschreiben (`Bildung OR Bildungsforschung`).
-- **Fallback `"any"`:** Findet die Schlagwortsuche nichts, sucht das Tool von
-  sich aus zusätzlich im Freitext und weist das im Ergebnis aus — ein Begriff
-  ohne GND-Ansetzung (z. B. „Deskilling") führt damit nicht mehr in eine
-  Nullrunde. Für ein bewusst breiteres Netz weiterhin `suchtyp="any"`,
-  `suchtyp="title"` für einen bestimmten Titel.
-- `opac_autor_suche` bei bekannter Person, `opac_isbn_suche` bei bekannter ISBN.
-- Nichts im BHT-Bestand → `kobv_verbund_suche` (gesamter Verbund). Auch dort
-  trägt jeder Treffer seine Bestandszeile: Titel, die die BHT besitzt, sind mit
-  ✅ markiert und **keine** Fernleihfälle. Der Fernleih-Nachsatz erscheint nur,
-  wenn die Liste tatsächlich einen enthält — er ist keine pauschale Empfehlung.
+  Wortbestandteil, `Bildung*` findet dasselbe wie `Bildung`. Wortformen per ` OR `
+  ausschreiben (`Bildung OR Bildungsforschung`).
 
-**Gib die ausgewählten Treffer als Tabelle aus** — mit genau diesen Spalten, der
-Titel ist der Link aus der Tool-Ausgabe:
+Weiter gilt:
+
+- `opac_autor_suche` bei bekannter Person, `opac_isbn_suche` bei bekannter ISBN,
+  `suchtyp="title"` bei gesuchtem Einzeltitel. **Kein `opac_erweiterte_suche`** —
+  existiert nicht; Mehrfeldlogik über mehrere Aufrufe.
+- Nichts im BHT-Bestand → `kobv_verbund_suche`. Auch dort trägt jeder Treffer seine
+  Bestandszeile: Titel, die die BHT besitzt, sind mit ✅ markiert und **keine**
+  Fernleihfälle.
+- **Umlaute:** Bei Encoding-Problemen im Z39.50-Zugang auf umlautfreie Varianten
+  oder Einzelbegriffe ausweichen und das transparent machen.
+- **Argumente flach übergeben** — `suchbegriff`, `suchtyp`, `max_treffer`,
+  `nur_bht_bestand` stehen nebeneinander, nicht in einem `params`-Objekt.
+- **Schlägt ein Katalogaufruf mit einer Schema- oder Validierungsmeldung fehl,**
+  denselben Aufruf höchstens **einmal** wiederholen. Scheitert er erneut, ist es
+  ein Werkzeugfehler, kein Suchproblem: in Alltagssprache melden („der Katalog hat
+  die Anfrage abgewiesen"), mit der Paper-Stufe weitermachen und den Katalog im
+  Recherchestand unter „Quellenlage" als offen führen.
+
+**Nullbefund richtig deuten.** Null Treffer in der Schlagwortsuche heißt fast immer:
+Der Begriff ist **kein GND-Schlagwort** — nicht, dass die Bibliothek nichts zum
+Thema hat. In dieser Reihenfolge:
+
+1. Etabliertes Nachbarschlagwort probieren (Praxisbeispiel: *partizipative
+   Forschung* → 0 Treffer, *Bürgerbeteiligung* → produktiv).
+2. Synonyme per ` OR ` in dieselbe Anfrage nehmen, statt sie nacheinander zu
+   probieren; ein Konzept ganz weglassen.
+3. Erst dann `suchtyp="any"`. Bei null Treffern sucht das Werkzeug von sich aus
+   zusätzlich im Freitext und weist das im Ergebnis aus — diesen Hinweis
+   übernehmen: Die Treffer sind dann weniger trennscharf als eine Schlagwortsuche.
+
+Diesen Schritt **sichtbar machen**: Er führt den Unterschied zwischen freiem und
+kontrolliertem Vokabular an einem echten Fehlschlag vor.
+
+**Gib die ausgewählten Treffer jetzt als Tabelle aus** — vor jedem weiteren Schritt,
+mit genau diesen Spalten:
 
 | Titel | Autor*innen | Jahr | Verfügbarkeit |
 |---|---|---|---|
-| [Stadtböden: Entwicklungen, Belastungen, Bewertung und Planung](OPAC-Link) | Pietsch, Kamieth | 1991 | ✅ In der BHT-Bibliothek vorhanden |
-| [Unsere Böden entdecken](Volltext-Link) | Don, Prietz | 2025 | ✅ Für die BHT lizenziert (E-Ressource) |
-| [Kohlenstoff in versiegelten und entsiegelten Böden in Berlin](Volltext-Link) | Thrum u. a. | 2023 | 🌐 Frei zugänglicher Volltext |
-| [Urbane Böden](Verlagsseite) | Hiller, Meuser | 1998 | 🔒 Lizenzpflichtig, für die BHT nicht nachgewiesen |
-| Anforderungen an die Wiederherstellung von Bodenfunktionen nach Entsiegelung | Gaßner | 2001 | ℹ️ Nicht in der BHT, im Verbund (→ Fernleihe) |
-| Verkehrsflächenüberbauung | — | o. J. | ❔ Kein Besitznachweis im Datensatz |
+| [Stadtböden: Entwicklungen, Belastungen, Bewertung und Planung](OPAC-Link) | Pietsch, Kamieth | 1991 | ✅ BHT-Bestand |
+| [Unsere Böden entdecken](Volltext-Link) | Don, Prietz | 2025 | ✅ BHT-Lizenz (E-Book) |
+| [Kohlenstoff in versiegelten und entsiegelten Böden in Berlin](Volltext-Link) | Thrum u. a. | 2023 | 🌐 Frei zugänglich |
+| [Urbane Böden](Verlagsseite) | Hiller, Meuser | 1998 | 🔒 Keine BHT-Lizenz, keine Fernleihe |
+| [Bodenfunktionen nach Entsiegelung](KOBV-Link) | Gaßner | 2001 | ℹ️ Fernleihe (KOBV) |
+| [Verkehrsflächenüberbauung](KOBV-Link) | — | o. J. | ❔ Bestand ungeklärt |
 
-- **Der Titel selbst ist der Link** — die URL aus der Tool-Ausgabe, unverändert.
-  Eine Tabelle ohne Links ist unbrauchbar. Ein Satz ohne ISBN hat keinen
-  `[OPAC]`-Link; trägt er einen Volltextlink, ist das der Link.
-- **Auflage** nur, wenn sie für die Auswahl zählt — dann hinter den Titel.
+*Quelle: BHT-webOPAC* (und *KOBV-Verbundkatalog*, sobald Verbundtreffer in der
+Tabelle stehen) — Pflichtzeile direkt unter der Tabelle.
 
-**Die Spalte „Verfügbarkeit" trägt das Bestandslabel aus der Werkzeugausgabe —
-unverändert und ungekürzt.** Sie ist die Auskunft; nicht selbst erschließen, wie
-ein Titel zu bekommen ist. Die sechs Label heißen für die Beschaffung: ✅
-**vorhanden** → ausleihbar, ✅ **lizenziert** → über die BHT zugänglich (ggf.
-Campus-Netz oder VPN), 🌐 **frei** → direkt lesbar, 🔒 **lizenzpflichtig ohne
-BHT-Nachweis** → **nicht** fernleihfähig, E-Ressourcen werden nicht verliehen,
-ℹ️ **nur im Verbund** → Fernleihe über das KOBV-Portal, ❔ **kein Besitznachweis**
-→ ungeklärt, und ungeklärt heißt nicht „nicht vorhanden": nicht als Fernleihfall
-behaupten. Fehlt die Bestandszeile ganz, ebenso verfahren.
+- **Die Spalte „Verfügbarkeit" ist die Kurzform der Bestandszeile des Treffers**,
+  nicht deine Einschätzung. Sechs Zustände: ✅ BHT-Bestand · ✅ BHT-Lizenz (E-Book) ·
+  🌐 Frei zugänglich · 🔒 Keine BHT-Lizenz, keine Fernleihe · ℹ️ Fernleihe (KOBV) ·
+  ❔ Bestand ungeklärt. Nie ℹ️ setzen, wo das Werkzeug ✅, 🌐 oder 🔒 meldet:
+  E-Ressourcen sind nicht fernleihfähig, freie Volltexte braucht niemand zu
+  bestellen, und ungeklärt heißt nicht „nicht vorhanden". Fehlt die Bestandszeile,
+  gilt ❔.
+- **Der Titel selbst ist der Link** (Herkunft siehe Ausgabe-Regeln). Eine Tabelle
+  ohne Links ist unbrauchbar; sie ist der Grund, warum die Tabelle kommt.
+- Der `[OPAC]`-Link führt zum Titel im lokalen webOPAC mit Signatur und
+  Verfügbarkeit und **ersetzt die Signatur**: Der KOBV-Verbundkatalog enthält keine
+  Standortsignatur, deshalb nie die PPN oder eine DDC/RVK-Klassifikation als
+  „Signatur" ausgeben.
+- Auflage nur, wenn sie für die Auswahl zählt — dann hinter den Titel.
 
-Fernleihe bekommt **keine eigene Spalte** und keinen pauschalen Nachsatz: ob sie
-in Frage kommt, steht im Label. Ein Titel im Bestand, ein freier Volltext und
-eine nicht lizenzierte E-Ressource sind drei verschiedene Antworten — „Fernleihe
-(KOBV)" ist nur für eine davon richtig.
-
-Wichtig: Der KOBV-Verbundkatalog enthält **keine** Standortsignatur. Gib deshalb
-**nicht** die PPN oder eine DDC/RVK-Klassifikation als „Signatur" aus — der
-`[OPAC]`-Link ersetzt die Signatur. Die PPN ist nur eine interne Datensatz-ID und
-gehört nicht in die Ausgabe.
+Unter der Tabelle in zwei bis drei Sätzen, **warum diese Titel**: was der Bestand
+hergibt, was nur über Fernleihe kommt, was auffällig fehlt.
 
 ### Stufe 2 — Paper-Suche (aktuelle Forschung)
 
-Erkläre den Übergang: Der Katalog zeigt die Grundlagen; für den aktuellen
-Forschungsstand braucht es Fachdatenbanken mit Zeitschriftenartikeln.
+Der Katalog zeigt die Grundlagen; für den aktuellen Forschungsstand braucht es
+Fachdatenbanken mit Zeitschriftenartikeln.
 
-- **`search_papers` mit gezielten Kernquellen, nicht `sources="all"`.**
-  `max_results_per_source` ca. 5 – nicht senken, das kostet relevante Treffer.
-  Für Aktualität das Jahr eingrenzen, nicht die Trefferzahl.
-- Englische Suchbegriffe bringen hier meist mehr Treffer; 3–8 Wörter.
+- **`search_papers` mit gezielten Kernquellen, nie `sources="all"`.**
+  `max_results_per_source` ca. 5. Ohne explizite Angabe steht der Wert auf `all`,
+  dann werden auch fachfremde und nicht erreichbare Quellen abgefragt.
+- Englische Suchbegriffe bringen meist mehr; 3–8 Wörter.
 
 | Auswahl | Quellen |
 |---|---|
 | Grundstock, alle Fächer | `openalex,semantic,crossref` |
-| + Bau, Umwelt, Maschinenbau | `openaire` – europäische Konferenz- und Repositorienliteratur (z. B. WCTE), sonst nirgends auffindbar |
-| + Life Sciences, Verfahrenstechnik | `europepmc` – **nicht** `pubmed`, **nicht** `pmc`; Preprints von bioRxiv/medRxiv sind hier mit drin |
+| + Bau, Umwelt, Maschinenbau | `openaire` — europäische Konferenz- und Repositorienliteratur (z. B. WCTE), sonst nirgends auffindbar |
+| + Life Sciences, Verfahrenstechnik | `europepmc` — **nicht** `pubmed`, **nicht** `pmc`; die bioRxiv- und medRxiv-Preprints stecken hier mit drin |
 | + Informatik | `arxiv`, `dblp` |
 | + sobald API-Keys gesetzt | `ieee`, `acm` |
 
-`biorxiv` und `medrxiv` gehören **nicht** in die Quellenliste: beide haben keine
-Stichwortsuche, sondern listen nur eine Kategorie der letzten 30 Tage. Sie sind
-deshalb auch nicht Teil von `sources="all"`. Ihre Preprints erreichst du über
-`europepmc`, das sie indexiert und tatsächlich durchsucht.
+Die Achse ist **Grundstock + fachliche Ergänzung**, nicht Fach → Quellenliste: die
+Quellen unterscheiden sich vor allem in der Metadatenqualität, nicht in der
+Fachabdeckung. Fachfremdes nicht pauschal zuschalten — bei einem Bau- oder
+Ingenieurthema liefern `arxiv` und `pubmed` reinen Fachfremd-Lärm.
 
-Die Achse ist **Grundstock + fachliche Ergänzung**, nicht Fach → Quellenliste:
-die Quellen unterscheiden sich vor allem in der Metadatenqualität, nicht in der
-Fachabdeckung. Dazu drei Dinge, die man beim Auswerten wissen muss:
+Fünf Dinge, die man beim Auswerten wissen muss:
 
 - **Crossref liefert oft Titel ohne Inhalt.** Abstract-Abdeckung an identischer
-  Stichprobe: OpenAlex 99 %, Semantic Scholar 98 %, **Crossref 75 %** – und das
+  Stichprobe: OpenAlex 99 %, Semantic Scholar 98 %, **Crossref 75 %** — und das
   verlagsabhängig, Elsevier und ACS liefern 0 %. Deshalb steht Crossref im
   Grundstock nicht allein.
 - **Europe PMC ersetzt `pubmed` + `pmc`.** Es bündelt PubMed-Abstracts und
@@ -204,157 +281,388 @@ Fachabdeckung. Dazu drei Dinge, die man beim Auswerten wissen muss:
   entsprechend thematisch danebenliegende Treffer ohne Abstract.
 - **dblp findet gut, aber screent schlecht:** keine Abstracts, keine
   Zitationszahlen. Für die Auswahl in dieser Stufe fehlen damit beide Signale.
+- **`biorxiv` und `medrxiv` nicht in die Quellenliste nehmen.** Beide haben keine
+  Stichwortsuche, sondern listen nur eine Kategorie der letzten 30 Tage; sie sind
+  deshalb auch nicht Teil von `sources="all"`. Ihre Preprints erreicht `europepmc`,
+  das sie indexiert und tatsächlich durchsucht.
+- **`base` nicht verwenden.** Der Zugang verlangt eine institutionelle
+  IP-Freischaltung, die nicht vorliegt; die Quelle antwortet dauerhaft leer. Google
+  Scholar und SSRN stehen auf dem Connector nicht zur Verfügung.
 
-Zwei Parameter, die sich in dieser Stufe lohnen:
+Drei Parameter, die sich in dieser Stufe lohnen:
 
-- `crossref_filter="type:journal-article"` filtert Dissertationen, Proceedings
-  und Verlagsartefakte aus dem Crossref-Anteil. In einem Testlauf zu
-  „cross-laminated timber fire resistance" waren ohne Filter alle Crossref-Treffer
-  Dissertationen und Konferenzbeiträge ohne Abstract; mit Filter stieg die Zahl
-  der Treffer mit Abstract von 5 auf 7 von 10.
+- `crossref_filter="type:journal-article"` filtert Dissertationen, Proceedings und
+  Verlagsartefakte aus dem Crossref-Anteil. In einem Testlauf zu „cross-laminated
+  timber fire resistance" waren ohne Filter alle Crossref-Treffer Dissertationen
+  und Konferenzbeiträge ohne Abstract; mit Filter stieg die Zahl der Treffer mit
+  Abstract von 5 auf 7 von 10.
 - `abstract_chars` kürzt die Abstracts (Standard 600 Zeichen). Fürs Screening
-  reichen die ersten Sätze. **Für die Begriffsernte `abstract_chars=0` setzen** –
-  wer Suchbegriffe aus Abstracts gewinnen will, braucht sie vollständig.
+  reichen die ersten Sätze; für die Begriffsernte im `p`-Hotkey `abstract_chars=0`
+  setzen, sonst fehlt gerade das Vokabular aus dem hinteren Teil.
+- **Der Jahresfilter wirkt nur auf Semantic Scholar.** Zum Priorisieren aktueller
+  Arbeiten nutzbar, aber sage nie, die Trefferliste sei auf einen Zeitraum
+  eingegrenzt — für echte Aktualität in der Auswahl nach Erscheinungsjahr filtern.
 
-**Auswahl der besten Titel – das ist Claudes Aufgabe, nicht die des Tools:**
-`search_papers` aggregiert pro Quelle und dedupliziert, **rankt aber nicht
-quellenübergreifend nach Relevanz**. Deshalb aktiv auswählen anhand der
-vorhandenen Signale:
+**Quellenfehler und Drosselung.** „Keine Treffer" und „hat nicht geantwortet" sind
+zwei verschiedene Aussagen und werden nie vermischt: Ein gedrosseltes Ergebnis als
+Trefferlage auszugeben führt dazu, dass die Person ihre Recherche einstellt. Die
+Antwort von `search_papers` weist **Trefferzahl und Fehler pro Quelle** aus — lies
+das aus, bevor du irgendetwas über die Trefferlage sagst.
 
-- **Zitationszahl** (OpenAlex liefert sie): hoher Wert = Grundlagen-/Referenzwerk.
-- **Erscheinungsjahr**: für die Aktualitäts-Achse.
-- **Fehltreffer aktiv aussortieren:** Manche Quellen (v. a. DOAJ) matchen nur den
-  Wortlaut. Ein Treffer, der den Suchbegriff im Titel trägt, aber inhaltlich nicht
-  zum Thema gehört (Beispielmuster: ein Aufsatz über Berufsschulunterricht, der
-  zufällig „Building Information" im Namen führt), wird **nicht** aufgenommen.
-- **Ziel ist eine Mischung:** 2–3 Grundlagenarbeiten (hohe Zitationszahl) plus
-  2–3 aktuelle Arbeiten (letzte ~3 Jahre, oft Open Access).
+| Beobachtung | Deutung | Reaktion |
+|---|---|---|
+| HTTP 429 oder Hinweis auf „rate limit", „quota" | Quelle hat gedrosselt | Ursache benennen, Quelle für die nächste Runde vormerken |
+| HTTP 409 | OpenAlex-Kreditkontingent erschöpft | Ursache benennen, nicht als Trefferlage ausgeben |
+| Genau eine Quelle liefert 0, die anderen normal | Meist Verfügbarkeit, nicht Bestand | Aggregierten Aufruf **einmal** wiederholen; Retry über das Einzeltool hilft nachweislich nicht |
+| Mehrere Quellen gleichzeitig leer nach parallelen Aufrufen | Vermutlich Drosselung | Aufrufe entzerren: nacheinander, ggf. weniger Quellen |
+| Alle Quellen 0, Werkzeuge antworten aber | Sprachliche Abdeckungslücke | Englische Entsprechung aus der Tabelle probieren |
+| 0 Treffer **ohne** gemeldeten Fehler | Quelle hat tatsächlich nichts gefunden | Als Befund behandeln |
 
-Nenne zu jedem ausgewählten Treffer: Titel, Autor*in(nen), Jahr, Quelle/Journal,
-die **DOI als klickbaren Link** und – wo vorhanden – die **Zitationszahl** (für die
-Person ein starker Relevanz-Hinweis). DOI immer als vollständige URL im Format
-`https://doi.org/<doi>` verlinken; liefert das Tool bereits eine volle URL, diese
-verwenden. Nackte DOI-Strings ohne Link vermeiden.
+Ist eine Quelle ausgefallen, gehört das **verpflichtend** in die Antwort, nach
+diesem Muster:
+
+> *Semantic Scholar hat diese Runde nicht geantwortet — die Datenbank hat die
+> Anfrage wegen zu vieler Zugriffe abgewiesen. Die Treffer unten stammen deshalb
+> nur aus Crossref, OpenAlex und DOAJ; gerade bei englischsprachiger Forschung
+> fehlt damit erfahrungsgemäß einiges. Mit „r" hole ich die Quelle nach.*
+
+Nie stillschweigend durch eine andere Quelle ersetzen, nie als Vollständigkeit
+ausgeben, nicht mehrfach hintereinander retrien — Drosselungsfenster lösen sich über
+Zeit, nicht über Druck.
+
+**Auswahl der besten Titel — deine Aufgabe, nicht die des Tools.** `search_papers`
+aggregiert und dedupliziert, **rankt aber nicht quellenübergreifend nach Relevanz**.
+Aktiv auswählen anhand:
+
+- **Erscheinungsjahr** für die Aktualitätsachse.
+- **Zitationszahl** (OpenAlex, Semantic Scholar) als ein Signal unter mehreren.
+  Wenn du sie ausgibst, ordne sie **einmal pro Recherche** ein: In etablierten
+  Feldern weisen hohe Werte auf Grundlagenwerke hin, in jungen Spezialgebieten
+  haben wichtige Arbeiten oft niedrige Werte; Naturwissenschaften zitieren im
+  Schnitt häufiger als Geisteswissenschaften.
+- **Zwei Aussortiergründe**, je mit einem kurzen Satz Begründung sichtbar gemacht
+  (ein bis zwei Beispiele pro Runde genügen): *Wortlaut-Fehltreffer* — v. a. DOAJ
+  matcht nur den Wortlaut; ein Aufsatz über Berufsschulunterricht, der zufällig
+  „Building Information" im Titel führt, fällt raus („Fokus auf X, nicht auf Y").
+  *Grauliteratur-Rauschen* — Regierungs- und Behördenberichte (häufig über OSTI)
+  treffen thematisch, tragen für eine Abschlussarbeit aber wenig bei.
+- **Ziel ist eine Mischung:** 2–3 Grundlagenarbeiten plus 2–3 aktuelle Arbeiten
+  (letzte ~3 Jahre, oft Open Access).
+
+**Gib die ausgewählten Treffer jetzt als Tabelle aus** — vor der Synthese, mit genau
+diesen Spalten:
+
+| Titel | Autor*innen | Quelle & Jahr | Zit. | Zugang |
+|---|---|---|---|---|
+| [Energy efficiency in cloud data centers: a survey](DOI-Link) | Katal u. a. | Cluster Computing 2022 | 472 | Open Access |
+| [Mesoclimatic effects on data centre siting](DOI-Link) | Turek, Radgen | Energies 2021 | 14 | Open Access |
+| [Liquid cooling for high-density racks](DOI-Link) | Chainer u. a. | IBM J. Res. Dev. 2017 | 96 | Lizenz (EZB) |
+
+*Quelle: Crossref, OpenAlex, Semantic Scholar* — Pflichtzeile direkt unter der
+Tabelle, vor der Begründung.
+
+- **Der Titel selbst ist der Link**, auf die DOI im Format `https://doi.org/<doi>`.
+  Liefert das Tool bereits eine volle URL, diese verwenden — nie nackte DOI-Strings,
+  nie eine Tabelle ohne Links.
+- **Zit.** nur, wenn die Quelle eine Zahl liefert; sonst Feld leer lassen, nicht
+  schätzen.
+- **Zugang:** Open Access (MDPI-Titel wie *Buildings* oder *Energies*, DOAJ, arXiv)
+  ist über den Link sofort lesbar; Verlagstitel hinter Paywall (Elsevier, Springer,
+  Wiley) laufen über die E-Ressourcen der BHT → „Lizenz (EZB)".
+
+Unter der Tabelle in zwei bis drei Sätzen: welche thematischen Stränge die Auswahl
+abdeckt, und — mit je einem Halbsatz — was aussortiert wurde und warum. Das gehört
+nicht in die Tabelle.
 
 ### Stufe 3 — Synthese
 
-- Ordne ein, was der Katalog (Grundlagen) und die Paper-Suche (aktuelle Forschung)
-  beigetragen haben.
-- Benenne Schwerpunkte oder Lücken in den Treffern.
+Ordne ein, was Katalog (Grundlagen) und Paper-Suche (aktuelle Forschung) beigetragen
+haben, und benenne Schwerpunkte oder Lücken. Taucht ein Name mehrfach auf? Dies ist
+eine Bilanz der Trefferlage, keine inhaltliche Synthese der Literatur.
 
-### Stufe 4 — Suchvorschläge (erweitern & vertiefen)
+Die Synthese **verweist** auf die zuvor ausgegebenen Treffer, sie ersetzt sie nicht.
+Wurde eine Trefferliste in Stufe 1 oder 2 nicht ausgegeben, hole das nach, bevor du
+hier weitermachst — eine Synthese über Titel, die die Person nie mit Link gesehen
+hat, ist wertlos.
 
-Zum Abschluss **konkrete, direkt ausführbare** Vorschläge für die nächste
-Suchrunde — abgeleitet aus dem, was die Treffer gezeigt haben, nicht generisch.
-Jeweils 2–3 Vorschläge pro Richtung, mit dem konkreten Suchbegriff bzw. Toolaufruf:
+**Strukturelle Lücken benennen, wo sie fachlich bekannt sind** — Werkzeuggrenze,
+kein Suchfehler. Lizenzierte Datenbanken erreicht die Person über DBIS:
 
-**Erweitern** (mehr/breitere Treffer), wenn die Ausbeute dünn war:
-- Nachbarbegriffe aus der Tabelle (Stufe 0), die noch nicht gesucht wurden
-- Oberbegriff statt engem Begriff; `suchtyp="any"` statt `"subject"`
-- Ein Konzept ganz weglassen (aus zwei Blöcken einer) oder den vorhandenen
-  Blöcken weitere Synonyme per ` OR ` hinzufügen
-- `nur_bht_bestand=false` → KOBV-Verbund (Fernleihe) für Titel außerhalb der BHT
-- Englische Begriffe für die Paper-Stufe, weitere Quellen fachabhängig zuschalten
+| Fach | Was den offenen Quellen fehlt |
+|---|---|
+| Erziehungs-/Bildungswissenschaft | pedocs, Zeitschrift *MedienPädagogik* |
+| Wirtschaftswissenschaften | EconBiz, EconLit |
+| Psychologie | PSYNDEX, PsycINFO |
+| Technik / Ingenieurwesen | IEEE Xplore |
+| Recht | beck-online, juris |
 
-**Vertiefen** (gezielter, spezifischer), wenn die Ausbeute gut war:
-- **Schlagwörter aus den besten Treffern** aufgreifen: Die GND-Schlagwörter der
-  OPAC-Ergebnisse sind erprobte Sucheinstiege — nenne sie als nächste Suchbegriffe.
-  Sollen die Begriffe aus den **Abstracts** der besten Paper kommen, die Suche mit
-  `abstract_chars=0` wiederholen — gekürzte Abstracts verschweigen genau die
-  Fachbegriffe am Ende.
-- **Autorensuche** (`opac_autor_suche`) zu Personen, die mehrfach auftauchten
-- Unterbegriff/Teilaspekt, der in den Treffern sichtbar wurde
-- Zeitliche Eingrenzung auf die letzten Jahre für den aktuellen Stand
+Generell sind deutschsprachige Zeitschriftenartikel in den offenen Quellen
+strukturell unterrepräsentiert — bei deutschsprachigen Themen ist der Katalog das
+stärkere Bein. Keine Vollständigkeit suggerieren.
 
-Formuliere die Vorschläge so, dass die Person sie direkt sagen kann („Suche als
-Nächstes nach …"). Erkläre bei ein bis zwei Vorschlägen kurz **warum** gerade
-dieser Schritt sinnvoll ist — das ist der didaktische Mehrwert: Die Person lernt
-das Muster „Treffer auswerten → Begriffe nachschärfen → erneut suchen".
+### Stufe 4 — Wie es weitergehen kann
 
-## Prozess-Transparenz (Audit)
+**Zwei bis drei nummerierte** Vorschläge, die sich aus *diesen* Treffern ergeben:
+ein konkretes Schlagwort aus einem Treffer, eine mehrfach auftauchende Person, ein
+Teilaspekt, der sich als eigenes Feld herausstellte. Die generischen Richtungen
+(breiter, enger, Pearl Growing, noch eine Runde) gehören **nicht** hierher — die
+deckt das Hotkey-Menü ab.
 
-Knapp am Ende sichtbar machen – als kurze Bilanz, keine Tabelle:
-OPAC (Anfragen, Treffer, genannt; davon im BHT-Bestand / frei im Netz /
-Fernleihfall) und Paper-Suche
-(Anfragen über welche Quellen, Treffer, genannt). Stufen ohne Treffer ausdrücklich
-benennen.
+Jeder Vorschlag: eine fette Überschrift in Alltagssprache, darunter ein bis zwei
+Sätze, *warum gerade das*, mit Bezug auf einen konkreten Treffer dieser Runde. Ohne
+diesen Bezug ist der Vorschlag wertlos.
 
-> Beispiel: **OPAC (subject, BHT):** 1 Anfrage, 93 Treffer, 4 genannt – alle an der BHT.
-> **Paper-Suche (openalex, semantic, crossref):** 1 Anfrage, 9 dedupliziert, 5 genannt.
-> **Ohne Treffer:** keine.
+> **1 — Nach „Building Information Modeling" im Katalog suchen**
+> Der Begriff steht als Schlagwort beim zweiten Treffer und ist der Dreh- und
+> Angelpunkt vieler KI-Anwendungen im Bauwesen. Weil er im Normvokabular etabliert
+> ist, führt er zuverlässig zu weiteren einschlägigen Büchern.
+>
+> **2 — Alles von Tan Yiğitcanlar ansehen**
+> Der Name taucht in drei der gefundenen Artikel auf — ein Hinweis auf eine zentrale
+> Stimme im Feld.
 
-## Schlusshinweis an die Person (Zugang zum Volltext)
+**So nicht** (Werkzeugsyntax gehört nicht in die Ausgabe):
 
-Kurz und sachlich, passend zum Treffertyp:
-- **Bücher (OPAC):** über den `[OPAC]`-Link direkt zum Titel im lokalen Katalog
-  (dort Signatur & Standort). Für alles andere richtet sich der Weg nach der
-  Bestandszeile: 🌐 direkt über den Volltextlink, ℹ️ Fernleihe über das
-  KOBV-Portal, 🔒 nicht fernleihfähig (E-Ressourcen werden nicht verliehen).
-- **Artikel:** Open-Access-Artikel direkt über den Link (DOI); lizenzpflichtige
-  über die E-Ressourcen der BHT (EZB/DBIS, bei Bedarf Shibboleth oder VPN).
-- **Zeitschriftenkennzahlen:** Die BHT lizenziert weder Web of Science noch die
-  Journal Citation Reports; ein Journal Impact Factor ist darüber nicht
-  verfügbar. Ersatzweise `zeitschrift_profil` (OpenAlex) — siehe unten.
+> ~~Schlagwort aufgreifen: `opac_suche("Building Information Modeling", suchtyp="subject")`~~
 
-## Abdeckung – ehrliche Grenzen
+Die Nummern sind ansprechbar wie die Hotkeys: „1" oder „mach 1" führt den Vorschlag
+aus. Diese Verbindung nicht erklären — sie ergibt sich aus der Nachbarschaft zum
+Menü.
 
-- Die offenen Paper-Quellen indexieren **englischsprachige** Literatur gut;
-  deutschsprachige Zeitschriftenartikel und Repositorien-Inhalte (z. B.
-  fachliche OA-Server) sind schwächer abgedeckt. Bei deutschsprachigen Themen ist
-  der OPAC (Bücher) das stärkere Bein, die Paper-Stufe eher englisch. Keine
-  Vollständigkeit suggerieren.
-- Weder OPAC noch `search_papers` liefern ein echtes Relevanz-Ranking über alle
-  Treffer. Die Qualität der Auswahl hängt davon ab, dass Claude scannt und nach
-  den genannten Signalen auswählt – nicht davon, die ersten N zu übernehmen.
+## Recherchestand
 
-## Werkzeug-Referenz (Connector `paper-opac-search-mcp`)
+Nach **jeder** Runde – auch nach jeder Hotkey-Runde – diesen Block ausgeben. Ohne
+ihn wiederholt eine Folgerunde dieselben Suchen.
 
-Katalog:
-- `opac_suche(suchbegriff, suchtyp="subject"|"any"|"title"|"author", max_treffer, nur_bht_bestand=true)`
-  — `suchbegriff` erlaubt die Blocksuche: `Konzept1 OR Synonym; Konzept2 OR Synonym`
-- `opac_autor_suche(autor, max_treffer, nur_bht_bestand=true)`
-- `opac_isbn_suche(isbn)`
-- `kobv_verbund_suche(suchbegriff, suchtyp="any", max_treffer)` — ohne
-  BHT-Filter, weist den BHT-Bestand aber trotzdem aus; der Fernleih-Nachsatz
-  erscheint nur bei echten Fernleihkandidaten
+> **Recherchestand**
+> **Thema:** Künstliche Intelligenz im Bauwesen
+> **Suchblöcke:** KI / Maschinelles Lernen · Bauwesen / Baubetrieb · Planung
+> **Bisher gesucht:**
+> · Katalog, Schlagwort „KI OR Künstliche Intelligenz; Bauwesen" — 93 Treffer, 4 ausgewählt (3 im Bestand, 1 Fernleihe)
+> · Katalog, Freitext „Bauinformatik" — 0 Treffer
+> · Fachdatenbanken (Semantic Scholar, Crossref, OpenAlex, DOAJ), *artificial intelligence construction* — 9 Treffer, 5 ausgewählt
+> **Quellenlage:** Crossref, OpenAlex, DOAJ haben geantwortet · Semantic Scholar gedrosselt, offen
+> **Bereits genannt:** Abioye u. a. 2021 · Yiğitcanlar u. a. 2020 · Borrmann (Hg.) 2021 · …
+> **Offene Begriffe:** Digitaler Zwilling (Katalog) · Bauwerksdatenmodellierung (Katalog) · predictive maintenance · construction automation
+> **Noch offen:** Block 3 („Planung") noch nicht gesucht; englische Begriffe im Katalog noch nicht probiert
 
-Paper:
-- `search_papers(query, sources="openalex,semantic,crossref", max_results_per_source=5, year=optional, abstract_chars=600, crossref_filter="")`
-- Quellenspezifische `search_*` (z. B. `search_openalex`) für gezielte Einzelabfragen.
+Die Zeile **Quellenlage** ist Pflicht, sobald eine Quelle ausgefallen ist. Sie bleibt
+so lange offen, bis die Quelle geantwortet oder bestätigt nichts geliefert hat.
 
-Zitationsverfolgung (Schneeballsystem):
-- `paper_referenzen(kennung, max_treffer, mit_abstract=false)` – rückwärts: worauf
-  baut die Arbeit auf?
-- `paper_zitiert_von(kennung, max_treffer, ab_jahr, mit_abstract=false)` – vorwärts:
-  wer zitiert sie? **`ab_jahr` immer setzen** (z. B. `ab_jahr=2022`): die Rückgabe ist
-  nach Zitationszahl absteigend sortiert. Bei hochzitierten Grundlagenarbeiten stehen
-  deshalb ältere Arbeiten oben, und ohne Jahresfilter fällt genau der aktuelle
-  Forschungsstand heraus, den der Vorwärtsschritt liefern soll.
-- `paper_verwandte` wird nicht verwendet.
+Die Zeile **Offene Begriffe** führt die Begriffe, die eine `p`-Runde geerntet hat,
+mit denen aber noch nicht gesucht wurde — katalogtaugliche deutsche Begriffe mit dem
+Zusatz „(Katalog)", englische Fachtermini für die Paper-Suche. Sie erscheint erst,
+wenn eine Ernte gelaufen ist, und ist die **erste Quelle, aus der `r` schöpft**.
+Begriffe, mit denen gesucht wurde, verschwinden aus der Zeile und erscheinen unter
+„Bisher gesucht"; ist die Zeile leer, entfällt sie wieder. Ohne diese Zeile bleibt
+eine Ernte folgenlos, weil die nächste Runde nicht weiß, dass es sie gab.
 
-Zeitschrift:
-- `zeitschrift_profil(kennung)` – Kennzahlen und Zugangsstatus einer Zeitschrift.
-  `kennung` nimmt ISSN, Zeitschriftennamen, OpenAlex-Source-ID oder Aufsatz-DOI.
-  Nur auf Nachfrage aufrufen, nicht routinemäßig je Treffer.
+## Hotkeys (Folgebefehle)
+
+Direkt nach dem Recherchestand das Menü ausgeben – kompakt, ohne Erklärtext:
+
+> **Weiter mit:**
+> `r` — noch eine Suchrunde in Katalog und Fachdatenbanken, mit den offenen Begriffen
+> `p` — Pearl Growing: Begriffe aus den besten Treffern ernten und die Suchbegriffstabelle nachschärfen (gesucht wird dann mit `r`)
+> `s` — Schneeball: den Zitaten der besten Treffer folgen, rückwärts und vorwärts
+> `a` — Autorensuche zu Namen, die mehrfach auftauchten
+> `w` — breiter suchen (Synonyme, Oberbegriffe, Freitext, ganzer KOBV-Verbund)
+
+Enger wird nicht per Hotkey gesucht: Dazu den Aspekt einfach nennen („nur Holzbau
+im Bestand").
+
+Aliasse: `runde` / `another round` (r) · `begriffe` / `terms` / `pearl` / `perle` (p) ·
+`schneeball` / `zitate` / `snowball` (s) · `autoren` / `authors` (a) · `weiter` /
+`breiter` / `broaden` (w).
+
+**Erkennungsregel:** Besteht die Eingabe nur aus einem dieser Buchstaben, einem
+Alias oder einer Vorschlagsnummer aus Stufe 4, ist es ein Befehl — nicht nachfragen,
+ausführen.
+
+**Regeln für Hotkey-Runden:**
+
+- Der volle Stufenablauf (0–4) gilt nur für die **erste** Runde. Eine Hotkey-Runde
+  führt nur ihren eigenen Schritt aus und endet wieder mit Recherchestand + Menü.
+- **Jede Hotkey-Runde führt ihren eigenen Schritt tatsächlich aus.** Sie darf ihn
+  nicht durch nummerierte Vorschläge im Stil von Stufe 4 ersetzen — ein „Nächster
+  Schritt: …" statt der Arbeit ist der häufigste Fehler. Auf einen anderen Hotkey
+  zu **verweisen** ist etwas anderes und bleibt erlaubt.
+- Die Erklärtexte zu den Stufen **nicht** wiederholen.
+- Vor jeder Runde in **einem Satz** sagen, was jetzt anders gesucht wird als zuvor —
+  die Begründung, nicht die Ankündigung eines Vorgehens.
+- Treffer aus „Bereits genannt" nicht erneut auflisten. Tauchen sie wieder auf, das
+  kurz erwähnen — Wiederkehr ist selbst ein Relevanzsignal.
+- Ist der Recherchestand nicht mehr auffindbar, nachfragen statt raten.
+- Eine Eingabe in Freitext, die kein Hotkey und keine Vorschlagsnummer ist, ist
+  keine neue Recherche, sondern eine **Einschränkung der laufenden**: Thema und
+  Suchbegriffstabelle aus dem Recherchestand bleiben, der genannte Aspekt kommt
+  hinzu. In einem Satz sagen, was dadurch wegfällt. Nur wenn ein erkennbar anderes
+  Thema genannt wird, beginnt der Stufenablauf neu.
+
+### `r` — Noch eine Suchrunde
+
+`r` ist die Runde, in der gesucht wird — und zwar **in beiden Stufen**: erst der
+Katalog (Schlagwortsuche wie in Stufe 1, als Blocksuche), dann die Fachdatenbanken
+(wie in Stufe 2). Beide Trefferlisten kommen als Tabelle, jede mit ihrer
+Quellenzeile.
+
+Den Katalog auch dann abfragen, wenn die vorangegangenen Runden nur Paper geliefert
+haben. Sonst bleibt die Grundlagenliteratur zu den neuen Begriffen unentdeckt — und
+genau dafür ist der Katalog da. Übersprungen wird er nur, wenn ein Begriff erkennbar
+nicht katalogfähig ist (ein englischer Fachterminus ohne deutsche GND-Entsprechung
+etwa), und dann mit einem Halbsatz Begründung.
+
+Welche Begriffe, in dieser Reihenfolge:
+
+1. Steht unter „Quellenlage" eine gedrosselte Quelle offen, wird sie zuerst
+   nachgeholt.
+2. Stehen unter „Offene Begriffe" Einträge, wird **mit diesen** gesucht — sie sind
+   in einer `p`-Runde bereits als aussichtsreich ausgewählt worden. Die verwendeten
+   aus der Zeile streichen, die übrigen stehen lassen.
+3. Ist die Zeile leer, aus „Noch offen" die vielversprechendste ungenutzte
+   Begriffskombination wählen — **andere Begriffe** oder ein **anderer Suchtyp**,
+   nicht dieselbe Anfrage mit höherer Trefferzahl.
+
+Für den Katalog die deutsche Spalte der Suchbegriffstabelle, für die Paper-Suche die
+englische; bei geernteten Begriffen ist das oft dieselbe Zeile in zwei Sprachen.
+Geerntete Synonyme gehören per ` OR ` in **denselben** Block, nicht in eine eigene
+Anfrage — das ist der Unterschied zwischen einer größeren und einer kleineren
+Treffermenge.
+
+### `p` — Pearl Growing (Begriffe ernten)
+
+Pearl Growing im engeren Sinn: aus den inhaltlich besten Treffern das Vokabular
+ziehen, mit dem das Feld selbst arbeitet, und die Suchbegriffstabelle damit
+nachschärfen. Das repariert die **Suchanfrage** — der richtige Schritt, wenn Treffer
+da sind, aber thematisch streuen, und besonders dann, wenn der Katalog leer blieb,
+während die Datenbanken geliefert haben: Dann passt das eigene Vokabular nicht zum
+Normvokabular.
+
+**Diese Runde erntet, sie sucht nicht.** Gesucht wird anschließend mit `r`. Die
+Trennung ist gewollt: Wer die Begriffe erst sieht, kann sie verwerfen oder ergänzen,
+bevor sie eine Suche bestimmen.
+
+Zuerst die 3–5 inhaltlich stärksten Treffer wählen und **benennen, warum gerade
+diese**. Daraus die Begriffe ziehen, die in der Tabelle fehlten — aus Titel, Abstract
+und Schlagwörtern. Für den Katalog vor allem die GND-Schlagwörter der Katalogtreffer,
+für die Paper-Suche die englischen Fachtermini. Stammen die Abstracts aus einer Runde
+mit gekürzten Abstracts, die Suche mit `abstract_chars=0` wiederholen.
+
+Dann die **Suchbegriffstabelle aus Stufe 0 vollständig neu ausgeben**, die neuen
+Einträge markiert, damit der Zuwachs sichtbar ist.
+
+Zuletzt die 2–4 aussichtsreichsten der geernteten Begriffe in die Zeile **Offene
+Begriffe** des Recherchestands eintragen — nicht die ganze Ernte, sondern die
+Auswahl, mit der `r` als Nächstes arbeitet. Katalogtaugliche deutsche Begriffe mit
+dem Zusatz „(Katalog)". In einem Satz sagen, warum gerade diese und was mit `r` als
+Nächstes gesucht wird. Tauchen Autor*innen mehrfach auf, zusätzlich auf `a`
+hinweisen.
+
+Liegen noch keine Treffer vor, gibt `p` die Tabelle aus Stufe 0 neu aus und fragt,
+mit welchem Block gesucht werden soll.
+
+### `s` — Schneeball (Zitationsverfolgung)
+
+Zitationsverfolgung: von einer bekannten Arbeit (der „Perle") dem Zitationsnetz
+folgen. Das repariert nicht die Anfrage, sondern umgeht sie — unabhängig davon, wie
+das Feld benennt. Der richtige Schritt, wenn wenige, aber inhaltlich sehr treffende
+Arbeiten mit DOI vorliegen.
+
+Eine oder zwei Perlen wählen und benennen, warum. Beide Richtungen sind verschieden
+ergiebig:
+
+- **Rückwärts** (`paper_referenzen`): worauf die Perle aufbaut → führt zu den
+  **Grundlagen**. Das Literaturverzeichnis ist endlich und nach Zitationszahl
+  sortiert, die Grundlagenarbeiten stehen also oben; `max_treffer=15` genügt. Bei
+  einem *Review* als Ausgangspunkt kommen oft Methodik-Arbeiten statt inhaltlicher
+  Grundlagen — dann vorwärts weiterarbeiten.
+- **Vorwärts** (`paper_zitiert_von`): wer die Perle zitiert → führt zum **aktuellen
+  Forschungsstand**, die Richtung, die eine Stichwortsuche nicht abbildet.
+
+**Zur Vorwärtssuche zwei Regeln, die zusammengehören.** Die Treffer sind nach
+Zitationszahl sortiert, und neue Arbeiten haben naturgemäß wenige Zitationen: Bei
+einer stark zitierten Perle endet die Liste deshalb mehrere Jahre in der
+Vergangenheit, obwohl gerade das Aktuelle gesucht war. Also `ab_jahr` auf die letzten
+drei bis vier Jahre setzen — **aber nur bei Perlen mit dreistelliger Zitationszahl.**
+`ab_jahr` filtert hart, es sortiert nicht: Bei einer schwach zitierten Perle fielen
+dadurch ältere zitierende Arbeiten weg, die problemlos in die Antwort gepasst hätten.
+
+Die Gesamtzahl gehört in die Ausgabe — „von 271 zitierenden Arbeiten die 25
+meistzitierten seit 2022". Ohne sie ist der Ausschnitt unsichtbar.
+
+Zum Schluss neue Treffer gegen „Bereits genannt" prüfen und Dubletten aussortieren.
+Sind dabei neue Fachbegriffe aufgefallen, `p` als nächsten Schritt vorschlagen.
+
+**Grenzen (kurz, wo sie auftreten):** Die Zitationsdaten stammen aus
+OpenAlex-Metadaten, nicht aus den PDFs — eine Arbeit ohne DOI oder OpenAlex-Datensatz
+lässt sich nicht verfolgen; kennt OpenAlex die Referenzliste nicht, kommt rückwärts
+nichts, dann auf vorwärts ausweichen. Der Schneeball findet nur Aufsätze, nie ein
+Lehrbuch und nie eine Signatur — zurück in den Katalog führen allein `p` und `r`. Die
+seitwärts-„verwandten" Treffer von OpenAlex (`paper_verwandte`) sind unzuverlässig
+und werden **nicht** verwendet.
+
+### `a` — Autorensuche
+
+Namen aufgreifen, die in mehreren Treffern auftauchten. Erst im Katalog, bei Bedarf
+zusätzlich in den Fachdatenbanken. Nennen, in welchen Treffern der Name vorkam.
+
+### `w` — Breiter suchen
+
+In dieser Reihenfolge: weitere Synonyme per ` OR ` in die vorhandenen Blöcke → ein
+Konzept ganz weglassen → Oberbegriffe statt enger Begriffe → Freitext statt
+Schlagwort → über den BHT-Bestand hinaus in den KOBV-Verbund → in der Paper-Stufe
+fachpassende weitere Datenbanken zuschalten. Die ersten beiden Schritte wirken am
+stärksten und kosten nichts: Im Katalog verengt jedes zusätzliche Konzept, jedes
+Synonym erweitert.
+
+Brachte eine Runde weniger als etwa fünf brauchbare Treffer, `w` im Menü an erster
+Stelle nennen: Bei dünner Trefferlage können die Vorschläge aus Stufe 4 nichts
+tragen, weil ihnen die Treffer fehlen, auf die sie sich beziehen müssten.
+
+### `d` — PDF exportieren
+
+Den `bht-pdf-generation`-Skill aufrufen und dabei die gesamte bisherige Recherche
+als kanonisches Markdown zusammenstellen. Das PDF enthält:
+
+1. **Einleitung** — ein bis zwei Sätze zum Thema und dessen Relevanz (aus den
+   bisherigen Suchblöcken ableiten).
+2. **Suchbegriffstabelle** — der aktuelle Stand der Blöcke und Begriffe.
+3. **Katalog-Treffer** — die Tabellen aus Stufe 1 mit ihren Links.
+4. **Paper-Treffer** — die Tabelle aus Stufe 2 mit DOI-Links, Zitationszahlen und
+   Zugangshinweisen.
+5. **Synthese** — Stufe 3, ohne die Trefferlisten zu wiederholen.
+6. **Vorschläge** — Stufe 4.
+7. **Recherchestand** — der aktuelle Block, inklusive Hotkey-Menü.
+
+Dabei gilt:
+
+- Alle Katalog-Links und DOIs als intakte klickbare URLs übernehmen und kenntlich
+  machen (blaue Schrift, unterstrichen).
+- **Kein** Volltext, keine Abstracts — nur die in dieser Sitzung gefundenen
+  bibliographischen Daten.
+- Den Schlusshinweis zu Zugang und Fernleihe ans Ende stellen (EZB/DBIS, KOBV).
+- Die PDF-Skill-Anweisung strikt befolgen: `document.md` in ein temporäres
+  Verzeichnis schreiben, dann Pandoc → Typst oder den ReportLab-Fallback,
+  `document.pdf` und `document-preview.png` nach `/mnt/data`.
 
 ## Zeitschriftenkennzahlen (nur auf Nachfrage)
 
 Fragt jemand nach der Qualität, dem Rang oder den Kennzahlen einer Zeitschrift,
-`zeitschrift_profil` aufrufen. Ausgabe als kurze Liste, nicht als Tabellenspalte:
-Verlag · Zugangsweg (Open Access, DOAJ-Eintrag, sonst Lizenz über die BHT) ·
-Zahl der erfassten Arbeiten · h-Index · Zitationsschnitt der letzten zwei Jahre.
+`zeitschrift_profil` aufrufen. Ausgabe als kurze Liste, **nicht** als Spalte in der
+Trefferliste: Verlag · Zugangsweg (Open Access, DOAJ-Eintrag, sonst Lizenz über die
+BHT) · Zahl der erfassten Arbeiten · h-Index · Zitationsschnitt der letzten zwei
+Jahre.
 
 **Immer mit dieser Einordnung darunter, in einem Satz:** Der Wert beschreibt die
 Zeitschrift, nicht den einzelnen Aufsatz — innerhalb einer Zeitschrift ist die
-Zitationsverteilung sehr schief, die Mehrheit der Beiträge liegt deutlich unter
-dem Schnitt. Für die Bewertung eines konkreten Titels taugt er nicht.
+Zitationsverteilung sehr schief, die Mehrheit der Beiträge liegt deutlich unter dem
+Schnitt. Für die Bewertung eines konkreten Titels taugt er nicht.
 
-**Nie „Impact Factor" oder „Zitationsfaktor" sagen.** Der Journal Impact Factor
-ist ein lizenzpflichtiges Produkt von Clarivate (Journal Citation Reports) und
-wird hier nicht abgebildet; der ausgegebene Wert stammt aus OpenAlex und ist mit
-dem JIF nicht zahlengleich. Wird ausdrücklich nach dem Impact Factor gefragt, das
-benennen und darauf hinweisen, dass die BHT weder Web of Science noch die JCR
-lizenziert.
+**Nie „Impact Factor" oder „Zitationsfaktor" sagen.** Der Journal Impact Factor ist
+ein lizenzpflichtiges Produkt von Clarivate (Journal Citation Reports) und wird hier
+nicht abgebildet; der ausgegebene Wert stammt aus OpenAlex und ist mit dem JIF nicht
+zahlengleich. Wird ausdrücklich nach dem Impact Factor gefragt, das benennen und
+darauf hinweisen, dass die BHT weder Web of Science noch die JCR lizenziert.
 
 Kam die Zuordnung über eine Namenssuche zustande (`zuordnung: "unscharf"`), das
 kennzeichnen: „Zuordnung über den Zeitschriftennamen, bitte an der ISSN prüfen."
@@ -363,13 +671,62 @@ kennzeichnen: „Zuordnung über den Zeitschriftennamen, bitte an der ISSN prüf
 Verwendung, die DORA und CoARA adressieren, und steht quer zu dem, was die
 Bibliothek sonst zur Forschungsbewertung vertritt.
 
-## Hinweise
+## Schlusshinweis an die Person (Zugang zum Volltext)
 
-- **Reihenfolge fest:** erst Suchbegriffstabelle (Stufe 0), dann OPAC (subject),
-  dann Paper, dann Synthese, dann Suchvorschläge. Die Tabelle steht **vor** der
-  ersten Suche — sie ist die Strategie, nicht die Nachbereitung.
-- **Kein `opac_erweiterte_suche`** – existiert nicht; Mehrfeld-Logik über mehrere
-  `opac_suche`-Aufrufe.
-- **Quellen nach der Tabelle in Stufe 2 wählen**, nicht pauschal alle. `base`
-  ist unzuverlässig, Google Scholar und SSRN stehen im Connector nicht zur
-  Verfügung.
+Beim **ersten** Durchgang ausgeben, danach nur bei Bedarf. Der Weg richtet sich nach
+der Verfügbarkeitsspalte aus Stufe 1:
+
+- **Bücher:** ✅ über den `[OPAC]`-Link zum Titel im lokalen Katalog (Signatur und
+  Standort) · 🌐 direkt über den Volltextlink · ℹ️ Fernleihe über das KOBV-Portal ·
+  🔒 nicht fernleihfähig, E-Ressourcen werden nicht verliehen (dann einen
+  Erwerbungsvorschlag oder eine Alternative aus der Trefferliste nennen).
+- **Artikel:** Open Access direkt über die DOI; lizenzpflichtige über die
+  E-Ressourcen der BHT (EZB/DBIS, bei Bedarf Shibboleth oder VPN).
+- **Zeitschriftenkennzahlen:** Die BHT lizenziert weder Web of Science noch die
+  Journal Citation Reports; ein Journal Impact Factor ist darüber nicht verfügbar.
+
+## Werkzeug-Referenz (Connector `paper-opac-search-mcp`)
+
+- `opac_suche(suchbegriff, suchtyp="subject"|"any"|"title"|"author", max_treffer, nur_bht_bestand=true)`
+  — `suchbegriff` nimmt die Blocksuche: `Konzept1 OR Synonym; Konzept2 OR Synonym`.
+- `opac_autor_suche(autor, max_treffer, nur_bht_bestand=true)`
+- `opac_isbn_suche(isbn)`
+- `kobv_verbund_suche(suchbegriff, suchtyp="any", max_treffer)` — ohne BHT-Filter,
+  weist den BHT-Bestand aber trotzdem aus.
+
+Die vier Katalog-Tools nehmen ihre Argumente **flach**, nicht in ein `params`-Objekt
+gewickelt. Jeder Treffer trägt eine Bestandszeile; sie füllt die Spalte
+„Verfügbarkeit" und bestimmt den Beschaffungsweg (siehe Stufe 1).
+
+- `search_papers(query, sources="openalex,semantic,crossref", max_results_per_source=5, year=optional, abstract_chars=600, crossref_filter="")`
+  — `sources` ist der Weg zu den einzelnen Datenbanken; Crossref, CORE, OpenAIRE und
+  die übrigen sind Parameterwerte, keine eigenen Aufrufe. Welches Set wann, steht in
+  Stufe 2.
+
+Zitationsverfolgung (nur `s`, nur mit DOI oder OpenAlex-ID):
+
+- `paper_referenzen(kennung, max_treffer=25, mit_abstract=false)` — rückwärts: was
+  das Paper zitiert.
+- `paper_zitiert_von(kennung, max_treffer=25, ab_jahr=optional, mit_abstract=false)`
+  — vorwärts: wer das Paper zitiert.
+- `mit_abstract=false` beibehalten. Die Abstracts der Stufe-2-Treffer liegen bereits
+  im Kontext; für die Begriffsernte braucht es keinen neuen Aufruf.
+- `paper_verwandte` **nicht verwenden** — unzuverlässig.
+
+Zeitschrift:
+
+- `zeitschrift_profil(kennung)` — Kennzahlen und Zugangsstatus einer Zeitschrift.
+  `kennung` nimmt ISSN, Zeitschriftennamen, OpenAlex-Source-ID oder Aufsatz-DOI.
+  Nur auf Nachfrage aufrufen, nicht routinemäßig je Treffer.
+
+Quellenspezifische `search_*` (z. B. `search_openalex`) existieren auf dem Server,
+werden hier aber **nicht** verwendet: Als Retry nach einem Nullbefund helfen sie
+nachweislich nicht, und alles andere leistet der aggregierte Aufruf.
+
+Nicht verwenden (Beschaffung): `download_*`, `read_*`. Der Server registriert diese
+Werkzeuge seit 0.7.0 nicht mehr; die Regel bleibt als Absicherung für ältere
+Installationen stehen.
+
+In LibreChat können MCP-Tools namespaced registriert sein (Muster
+`<toolname>_mcp_<servername>`). Maßgeblich sind die Namen, die im Agenten
+tatsächlich verfügbar sind.
