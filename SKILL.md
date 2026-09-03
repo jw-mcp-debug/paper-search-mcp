@@ -63,8 +63,6 @@ und die Paper-Suche über mehrere Datenbanken.
 - **Links aus der Tool-Ausgabe unverändert übernehmen.** Jeder genannte Treffer
   trägt seinen Link; auch beim Umschreiben bleibt er erhalten, und interne IDs
   (PPN) ersetzen ihn nie.
-- **Erst abwarten, dann weitergehen.** Eine Suche ist erst abgeschlossen, wenn die
-  Ergebnisse da sind und gesichtet wurden.
 - **Lücken offenlegen, nicht auffüllen.** Null Treffer wird gesagt — aber prüfe
   vorher die Fehlermuster in Stufe 1 und 2: Die meisten Nullbefunde sind Vokabular-
   oder Verfügbarkeitsprobleme, keine echten Lücken.
