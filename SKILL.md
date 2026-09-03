@@ -260,6 +260,11 @@ Weiter gilt:
   ein Werkzeugfehler, kein Suchproblem: in Alltagssprache melden („der Katalog hat
   die Anfrage abgewiesen"), mit der Paper-Stufe weitermachen und den Katalog im
   Recherchestand unter „Quellenlage" als offen führen.
+- **Jeden Aufruf sofort mitschreiben**, nicht am Ende rekonstruieren: Suchbegriff,
+  Suchtyp, Trefferzahl, Zahl der ausgewählten Titel. Diese vier Werte füllen später
+  die Zeile „Bisher gesucht" im Recherchestand. Wer sie erst dort zusammensucht,
+  schätzt sie — und Zahlen, die eine Trefferlage beschreiben, dürfen nicht geschätzt
+  sein.
 
 **Nullbefund richtig deuten.** Null Treffer in der Schlagwortsuche heißt fast immer:
 Der Begriff ist **kein GND-Schlagwort** — nicht, dass die Bibliothek nichts zum
@@ -400,6 +405,12 @@ diesem Muster:
 Nie stillschweigend durch eine andere Quelle ersetzen, nie als Vollständigkeit
 ausgeben, nicht mehrfach hintereinander retrien — Drosselungsfenster lösen sich über
 Zeit, nicht über Druck.
+
+**Auch hier jeden Aufruf sofort mitschreiben:** Suchbegriff, abgefragte Quellen,
+Trefferzahl, Zahl der ausgewählten Titel — dazu jede Quelle, die nicht geantwortet
+hat, mit dem Grund. Das füllt „Bisher gesucht" und „Quellenlage" im Recherchestand.
+Die Fehlerangaben stehen nur in der Antwort des jeweiligen Aufrufs; nach der
+nächsten Suche sind sie nicht mehr rekonstruierbar.
 
 **Auswahl der besten Titel — deine Aufgabe, nicht die des Tools.** `search_papers`
 aggregiert und dedupliziert, **rankt aber nicht quellenübergreifend nach Relevanz**.
