@@ -172,120 +172,106 @@ verwendest und warum.
 
 ### Stufe 1 — OPAC (Grundlagenliteratur, BHT-Bestand)
 
-Der Katalog liefert Lehrbücher, Handbücher, etablierte Werke, vorrangig den an der
-BHT verfügbaren Bestand. Suchbegriffe aus Stufe 0, vorrangig deutsche Spalte.
+**Ziel:** die Grundlagen zum Thema aus dem BHT-Bestand — Lehrbücher, Handbücher,
+etablierte Werke — als Tabelle mit Bestandsangabe und Link.
 
-- **Den Zugriff nach Begriffstyp wählen, nicht pauschal mit `"subject"`
-  beginnen.** `nur_bht_bestand=true`, `max_treffer` 12–15. Welcher `suchtyp`
-  trägt, hängt daran, ob der Begriff im Normvokabular angesetzt ist:
-  - **Etablierter, aber mehrdeutiger Allgemeinbegriff** („Lernmotivation",
-    „Bürgerbeteiligung", „Nachhaltiges Bauen") → `suchtyp="subject"`. Hier trägt
-    die GND, und Freitext ertrinkt: „Lernmotivation" als Schlagwort ergab 14
-    Treffer, praktisch alle einschlägig.
-  - **Distinktiver Fachterminus, meist jung und oft englisch** („Gamification",
-    „Building Information Modeling", „Deskilling") → `suchtyp="title"` oder
-    `"any"`, deutsche und englische Schreibvarianten per ` OR `. Der Begriff ist
-    von sich aus eindeutig; die Schlagwortsuche kostet hier Recall, ohne
-    Präzision zu gewinnen: „Gamification" ergab als Schlagwort **17** Treffer,
-    als Titelsuche mit Varianten **32**, über alle Felder **43**.
-- **Warum die Schlagwortsuche gerade die neueren Titel verliert.** Der Katalog
-  mischt Datenherkünfte. Verbundaufnahmen (Kennung `b3kat_…`) tragen deutsche
-  GND-Schlagwörter; die Aufnahmen aus den lizenzierten E-Book-Paketen
-  (`almahu_…`, `almatuudk_…`, `edocfu_…`) tragen stattdessen die englischen
-  Fachkategorien des Verlags. Eine GND-Schlagwortsuche filtert damit
-  unbeabsichtigt fast die gesamte E-Book-Ebene weg — den Teil des Bestands, in
-  dem die Literatur der letzten Jahre liegt. Zwei Belege aus einer Recherche zu
-  Gamification: „The gamification of learning and instruction" (Kapp 2012) ist
-  als „Lernspiel · Trainingsmethode" verschlagwortet und führt *Gamification*
-  nur im Titel; „Gamification in der Hochschullehre" (Körner u. a. 2024) trägt
-  ausschließlich Springer-Kategorien. Beide sind für eine Schlagwortsuche nach
-  *Gamification* unsichtbar — und beide sind die einschlägigsten Titel des
-  Bestands. Dass derselben Autorengruppe der Band von 2025 ein
-  *Gamification*-Schlagwort bekam und der von 2024 nicht, zeigt, wie wenig
-  verlässlich die Verschlagwortung ist.
-- **Die Trefferliste ist nicht relevanzsortiert** — die angezeigten N sind die
-  ersten N von vielen. Deshalb 12–15 scannen und die einschlägigsten **selbst
-  auswählen**, statt die ersten fünf zu übernehmen. Kriterien: Passung von Titel
-  und Schlagwörtern, aktuelle Auflage, Lehrbuch/Handbuch vor enger Monografie.
+**Fertig, wenn** ein Aufruf keinen Titel mehr bringt, den du in die Tabelle aufnehmen
+würdest. Wie viele Aufrufe das braucht, entscheidet die Trefferlage: Ein Thema mit
+einem etablierten Schlagwort ist nach zwei Aufrufen erledigt, ein interdisziplinäres
+nach acht. Nicht früher aufhören, weil die ersten Treffer brauchbar aussahen, und
+nicht weitersuchen, weil sich noch eine Variante bilden ließe.
 
-**Die Blöcke aus Stufe 0 als Blocksuche übergeben.** Der Katalog kennt kein
-Relevanzranking und verknüpft alle Wörter mit UND — jedes zusätzliche Wort ist ein
-harter Filter. `opac_suche` und `kobv_verbund_suche` nehmen deshalb Konzepte und
-ihre Synonyme in **einer** Anfrage entgegen: `;` trennt die Konzepte (UND), ` OR `
-deren Synonyme (ODER), Anführungszeichen erzwingen eine Phrase.
+#### Verfahren
+
+**1 — Sondieren.** Zwei Aufrufe parallel, mit Block 1 aus Stufe 0, jeweils
+`max_treffer=15`, `nur_bht_bestand=true`:
+
+    opac_suche(begriff,                    suchtyp="subject")
+    opac_suche(begriff OR Schreibvarianten, suchtyp="title")
+
+Nicht vorab entscheiden, welcher Zugriff der richtige ist. Das hängt daran, ob der
+Begriff in der GND angesetzt ist — und das steht erst nach dem Aufruf fest.
+
+**2 — Zugriff festlegen.** Die erste zutreffende Zeile gilt für den Rest der Stufe:
+
+| Beobachtung | Zugriff |
+|---|---|
+| `subject` = 0 Treffer | Nachbarschlagwort probieren (siehe „Wenn nichts kommt"), sonst `"any"` |
+| `title` liefert mindestens die Hälfte mehr als `subject` | `"title"` |
+| die Titeltreffer teilen keine Schlagwörter mit dem Konzept | Begriff ist generisch: verwerfen, engeren Begriff aus Stufe 0 nehmen |
+| sonst | `"subject"` |
+
+**3 — Zweites Konzept anhängen** (Block 2 aus Stufe 0), als Blocksuche in **einer**
+Anfrage: `;` trennt die Konzepte (UND), ` OR ` deren Synonyme (ODER),
+Anführungszeichen erzwingen eine Phrase.
 
     KI OR "Künstliche Intelligenz"; Bildung OR Unterricht OR Hochschule
 
-- **Höchstens zwei Konzepte pro Anfrage.** Drei sind für einen Katalog fast immer
-  zu eng — er indexiert Titel und Schlagwörter, keine Volltexte. Synonyme dagegen
-  kosten nichts: Sie vergrößern die Treffermenge, statt sie zu verkleinern.
-- Deutsche und englische Fassung eines Konzepts gehören in denselben Block.
-- **Zwei Konzepte nie in `"any"` kombinieren.** Dort wirkt jedes Konzept als
-  harter UND-Filter über einen metadatenarmen Datensatz, in dem sich zwei
-  Konzepte fast nie treffen: `Gamification OR Gamifizierung OR "Serious Game";
-  Motivation OR Lernmotivation` ergab über alle Felder **1** Treffer — schlechter
-  als jede der beiden Einzelsuchen. Die Blocksuche gehört in `"subject"` und
-  `"title"`; bei `"any"` ein Konzept pro Anfrage.
-- **Generische Wörter nicht in die Titelsuche geben.** `Spiel OR spielerisch;
-  Lernen OR Unterricht` ergab als Titelsuche 28 Treffer, überwiegend
-  Programmierlehrbücher („Java will nur spielen", „spielerisch programmieren
-  lernen") — an einer technischen Hochschule ist „spielerisch lernen" ein
-  Verlagsslogan für Einsteigerbände. Solche Wörter gehören ins Schlagwortfeld
-  oder gar nicht in die Anfrage.
-- **Findet keine Kombination die Schnittmenge, jedes Konzept einzeln suchen und
-  die Schnittmenge beim Lesen bilden.** Bei einem Katalog ohne Volltextindex ist
-  das für ein Thema, das zwei Fächer verbindet, oft der einzige Weg. Eine
-  Kombination, die einen einzigen Treffer liefert, ist kein Befund über den
-  Bestand, sondern einer über die Anfrage.
-- **Keine Trunkierung:** `*` und `?` wirken nicht — der Katalog liest sie als
-  Wortbestandteil, `Bildung*` findet dasselbe wie `Bildung`. Wortformen per ` OR `
-  ausschreiben (`Bildung OR Bildungsforschung`).
+- **Nie mehr als zwei Konzepte.** Der Katalog kennt kein Relevanzranking und
+  verknüpft alle Wörter mit UND — jedes weitere Wort ist ein harter Filter. Synonyme
+  dagegen kosten nichts: Sie vergrößern die Treffermenge und gehören per ` OR ` in
+  denselben Block, deutsche und englische Fassung zusammen.
+- **Nie zwei Konzepte in `"any"`.** Dort trifft der UND-Filter einen
+  metadatenarmen Datensatz, in dem zwei Konzepte fast nie zusammenkommen. Die
+  Blocksuche gehört in `"subject"` und `"title"`; bei `"any"` ein Konzept pro
+  Anfrage.
+- **Unter drei Treffern die Kombination verwerfen** und beide Konzepte einzeln
+  suchen, die Schnittmenge beim Lesen bilden. Eine Kombination mit einem einzigen
+  Treffer ist kein Befund über den Bestand, sondern einer über die Anfrage.
+- **Keine Trunkierung.** `*` und `?` liest der Katalog als Wortbestandteil;
+  Wortformen per ` OR ` ausschreiben (`Bildung OR Bildungsforschung`).
 
-Weiter gilt:
+**4 — Verbund.** Bleiben weniger als vier Titel aus dem BHT-Bestand:
+`kobv_verbund_suche` mit dem Zugriff aus Schritt 2. Auch dort weist jeder Treffer
+seine Bestandszeile aus — Titel mit ✅ besitzt die BHT und sind **keine**
+Fernleihfälle.
 
-- `opac_autor_suche` bei bekannter Person, `opac_isbn_suche` bei bekannter ISBN,
-  `suchtyp="title"` bei gesuchtem Einzeltitel. **Kein `opac_erweiterte_suche`** —
-  existiert nicht; Mehrfeldlogik über mehrere Aufrufe.
-- Nichts im BHT-Bestand → `kobv_verbund_suche`. Auch dort trägt jeder Treffer seine
-  Bestandszeile: Titel, die die BHT besitzt, sind mit ✅ markiert und **keine**
-  Fernleihfälle.
-- **Umlaute:** Bei Encoding-Problemen im Z39.50-Zugang auf umlautfreie Varianten
-  oder Einzelbegriffe ausweichen und das transparent machen.
-- **Argumente flach übergeben** — `suchbegriff`, `suchtyp`, `max_treffer`,
-  `nur_bht_bestand` stehen nebeneinander, nicht in einem `params`-Objekt.
-- **Schlägt ein Katalogaufruf mit einer Schema- oder Validierungsmeldung fehl,**
-  denselben Aufruf höchstens **einmal** wiederholen. Scheitert er erneut, ist es
-  ein Werkzeugfehler, kein Suchproblem: in Alltagssprache melden („der Katalog hat
-  die Anfrage abgewiesen"), mit der Paper-Stufe weitermachen und den Katalog im
-  Recherchestand unter „Quellenlage" als offen führen.
-- **Jeden Aufruf sofort mitschreiben**, nicht am Ende rekonstruieren: Suchbegriff,
-  Suchtyp, Trefferzahl, Zahl der ausgewählten Titel. Diese vier Werte füllen später
-  die Zeile „Bisher gesucht" im Recherchestand. Wer sie erst dort zusammensucht,
-  schätzt sie — und Zahlen, die eine Trefferlage beschreiben, dürfen nicht geschätzt
-  sein.
+**5 — Auswählen.** Die Trefferliste ist **nicht relevanzsortiert**; die angezeigten N
+sind die ersten N von vielen. Deshalb alle 12–15 scannen und selbst auswählen, statt
+die ersten fünf zu übernehmen. Kriterien: Passung von Titel und Schlagwörtern,
+aktuelle Auflage, Lehrbuch oder Handbuch vor enger Monografie.
 
-**Nullbefund richtig deuten.** Null Treffer in der Schlagwortsuche heißt fast immer:
-Der Begriff ist **kein GND-Schlagwort** — nicht, dass die Bibliothek nichts zum
-Thema hat. In dieser Reihenfolge:
+**Nach jedem Aufruf mitschreiben:** Suchbegriff, Suchtyp, Trefferzahl, Zahl der
+ausgewählten Titel. Diese vier Werte füllen später „Bisher gesucht" im
+Recherchestand; nachträglich lassen sie sich nur noch schätzen.
+
+#### Wenn nichts kommt
+
+Null Treffer in der Schlagwortsuche heißt fast immer: Der Begriff ist **kein
+GND-Schlagwort** — nicht, dass die Bibliothek nichts zum Thema hat. In dieser
+Reihenfolge:
 
 1. Etabliertes Nachbarschlagwort probieren (Praxisbeispiel: *partizipative
    Forschung* → 0 Treffer, *Bürgerbeteiligung* → produktiv).
 2. Synonyme per ` OR ` in dieselbe Anfrage nehmen, statt sie nacheinander zu
    probieren; ein Konzept ganz weglassen.
-3. Erst dann `suchtyp="any"`. Bei null Treffern sucht das Werkzeug von sich aus
-   zusätzlich im Freitext und weist das im Ergebnis aus — diesen Hinweis
-   übernehmen: Die Treffer sind dann weniger trennscharf als eine Schlagwortsuche.
+3. Erst dann `"any"`. Bei null Treffern sucht das Werkzeug von sich aus zusätzlich im
+   Freitext und weist das im Ergebnis aus — diesen Hinweis übernehmen: Die Treffer
+   sind dann weniger trennscharf als eine Schlagwortsuche.
 
-**Eine auffällig kleine Trefferliste ist derselbe Befund — nur unsichtbar.** Der
-automatische Freitext-Fallback greift nur bei **null** Treffern, nicht bei fünf
-oder siebzehn. Genau dort wäre er am nötigsten: Eine Schlagwortsuche, die 17 statt
-43 Titeln zurückgibt, sieht erfolgreich aus und ist es nicht. Deshalb bei jedem
-distinktiven Fachterminus `suchtyp="title"` gegenprüfen, bevor du eine
-Bestandslücke meldest — und erst recht, bevor du der Person sagst, die Bibliothek
-habe zu ihrem Thema nichts.
+Der Freitext-Fallback greift **nur bei null** Treffern, nicht bei einer kleinen
+Trefferliste — deshalb erledigt Schritt 1 die Gegenprobe von vornherein. Bevor du
+sagst, die Bibliothek habe zu einem Thema nichts, muss die Titelsuche gelaufen sein.
 
-Diesen Schritt **sichtbar machen**: Er führt den Unterschied zwischen freiem und
-kontrolliertem Vokabular an einem echten Fehlschlag vor.
+Den Fehlschlag **sichtbar machen**: Er führt den Unterschied zwischen freiem und
+kontrolliertem Vokabular an einem echten Beispiel vor.
+
+#### Werkzeugfälle
+
+- `opac_autor_suche` bei bekannter Person, `opac_isbn_suche` bei bekannter ISBN.
+  **Kein `opac_erweiterte_suche`** — existiert nicht; Mehrfeldlogik über mehrere
+  Aufrufe.
+- **Argumente flach übergeben** — `suchbegriff`, `suchtyp`, `max_treffer`,
+  `nur_bht_bestand` stehen nebeneinander, nicht in einem `params`-Objekt.
+- **Umlaute:** Bei Encoding-Problemen im Z39.50-Zugang auf umlautfreie Varianten oder
+  Einzelbegriffe ausweichen und das transparent machen.
+- **Schema- oder Validierungsfehler:** denselben Aufruf höchstens **einmal**
+  wiederholen. Scheitert er erneut, ist es ein Werkzeugfehler, kein Suchproblem: in
+  Alltagssprache melden („der Katalog hat die Anfrage abgewiesen"), mit der
+  Paper-Stufe weitermachen und den Katalog im Recherchestand unter „Quellenlage" als
+  offen führen.
+
+#### Ausgabe
 
 **Gib die ausgewählten Treffer jetzt als Tabelle aus** — vor jedem weiteren Schritt,
 mit genau diesen Spalten:
@@ -319,6 +305,42 @@ Tabelle stehen) — Pflichtzeile direkt unter der Tabelle.
 
 Unter der Tabelle in zwei bis drei Sätzen, **warum diese Titel**: was der Bestand
 hergibt, was nur über Fernleihe kommt, was auffällig fehlt.
+
+#### Bevor Stufe 2 beginnt
+
+- Tabelle ausgegeben, mit der Quellenzeile darunter?
+- Jeder Titel verlinkt, der Link unverändert aus der Werkzeugausgabe?
+- Verfügbarkeit aus der Bestandszeile übernommen, nicht selbst eingeschätzt?
+- Trefferzahl und Auswahl je Aufruf notiert?
+- Zwei bis drei Sätze darunter, warum diese Titel?
+
+#### Warum das Verfahren so aussieht
+
+Nicht Teil der Ausführung — Hintergrund für Fälle, die keine Regel abdeckt.
+
+**Die Schlagwortsuche verliert gerade die neueren Titel.** Der Katalog mischt
+Datenherkünfte: Verbundaufnahmen (Kennung `b3kat_…`) tragen deutsche
+GND-Schlagwörter, die Aufnahmen aus den lizenzierten E-Book-Paketen (`almahu_…`,
+`almatuudk_…`, `edocfu_…`) stattdessen die englischen Fachkategorien des Verlags.
+Eine GND-Schlagwortsuche filtert damit unbeabsichtigt fast die gesamte E-Book-Ebene
+weg — den Teil des Bestands, in dem die Literatur der letzten Jahre liegt.
+
+**Gemessen an einer Recherche zu Gamification.** „Gamification" ergab als Schlagwort
+17 Treffer, als Titelsuche mit Varianten 32, über alle Felder 43. Die beiden
+einschlägigsten Titel des Bestands waren für die Schlagwortsuche unsichtbar: „The
+gamification of learning and instruction" (Kapp 2012) ist als „Lernspiel ·
+Trainingsmethode" verschlagwortet, „Gamification in der Hochschullehre" (Körner
+u. a. 2024) trägt nur Springer-Kategorien. Dass derselben Autorengruppe der Band von
+2025 ein *Gamification*-Schlagwort bekam und der von 2024 nicht, zeigt, wie wenig
+verlässlich die Verschlagwortung ist. Umgekehrt war „Lernmotivation" als Schlagwort
+mit 14 Treffern präzise, während `Spiel OR spielerisch; Lernen OR Unterricht` als
+Titelsuche 28 Treffer brachte, überwiegend Programmierlehrbücher — an einer
+technischen Hochschule ist „spielerisch lernen" ein Verlagsslogan. Und
+`Gamification OR Gamifizierung OR "Serious Game"; Motivation OR Lernmotivation`
+ergab über alle Felder genau 1 Treffer, schlechter als jede Einzelsuche.
+
+Daraus folgt die Tabelle in Schritt 2: messen statt vorab einordnen, weil die
+Eigenschaft, auf die es ankommt, erst im Ergebnis sichtbar wird.
 
 ### Stufe 2 — Paper-Suche (aktuelle Forschung)
 
