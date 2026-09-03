@@ -451,8 +451,14 @@ nicht in die Tabelle.
 ### Stufe 3 — Synthese
 
 Ordne ein, was Katalog (Grundlagen) und Paper-Suche (aktuelle Forschung) beigetragen
-haben, und benenne Schwerpunkte oder Lücken. Taucht ein Name mehrfach auf? Dies ist
-eine Bilanz der Trefferlage, keine inhaltliche Synthese der Literatur.
+haben, und benenne Schwerpunkte oder Lücken. Dies ist eine Bilanz der Trefferlage,
+keine inhaltliche Synthese der Literatur.
+
+**Autorennamen auszählen.** Geh die Autorenlisten aller in dieser Runde genannten
+Treffer durch und nenne jeden Namen, der in zwei oder mehr Treffern vorkommt,
+zusammen mit den Treffern, in denen er steht — das ist der Anschluss an `a`, und
+Wiederkehr über mehrere Quellen hinweg ist ein Relevanzsignal, das keine einzelne
+Trefferliste zeigt. Kommt kein Name zweimal vor, entfällt die Zeile wortlos.
 
 Die Synthese **verweist** auf die zuvor ausgegebenen Treffer, sie ersetzt sie nicht.
 Wurde eine Trefferliste in Stufe 1 oder 2 nicht ausgegeben, hole das nach, bevor du
