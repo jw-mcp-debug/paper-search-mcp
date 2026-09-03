@@ -136,6 +136,11 @@ entgegen.
   in Stufe 1. Fachtermini, die im Deutschen unübersetzt bleiben („Gamification",
   „Building Information Modeling"), gehören in **beide** Spalten: Im Katalog sind
   sie kein Schlagwort, aber ein Titelwort — Stufe 1 sucht sie über den Titel.
+- **Block 1 ist das spezifischste Konzept, Block 2 der Kontext.** Mit diesen beiden
+  sucht Stufe 1; mehr als zwei Konzepte nimmt der Katalog nicht an. Weitere Blöcke
+  sind Reserve: Sie gehören in den Recherchestand unter „Noch offen" und kommen in
+  einer `r`-Runde dran. Ohne diese Festlegung greift jede Runde zu anderen zwei
+  Blöcken, und die Trefferlagen sind nicht mehr vergleichbar.
 
 **Fachvokabular — Empfehlung an die Person, kein Arbeitsschritt.** Nenne bei
 einschlägigen Themen die passende Thesaurus-Quelle. Der Skill kann diese Thesauri
