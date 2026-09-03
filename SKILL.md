@@ -728,6 +728,10 @@ Dabei gilt:
 - Die PDF-Skill-Anweisung strikt befolgen: `document.md` in ein temporäres
   Verzeichnis schreiben, dann Pandoc → Typst oder den ReportLab-Fallback,
   `document.pdf` und `document-preview.png` nach `/mnt/data`.
+- **Fehlt `bht-pdf-generation` in dieser Sitzung** oder gibt es `/mnt/data` nicht:
+  kein Ersatzverfahren erfinden und keine andere Bibliothek suchen. Sag in einem
+  Satz, dass der PDF-Export hier nicht zur Verfügung steht, und gib denselben
+  Inhalt in derselben Gliederung als Markdown im Chat aus, mit allen Links intakt.
 
 ## Zeitschriftenkennzahlen (nur auf Nachfrage)
 
