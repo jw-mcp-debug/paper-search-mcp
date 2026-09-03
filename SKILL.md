@@ -135,20 +135,27 @@ die **Bestandszeile** und den **`[OPAC]`-Link aus der Tool-Ausgabe** — diesen 
 **unverändert übernehmen**; er führt direkt zum Titel im lokalen webOPAC mit
 Signatur & Verfügbarkeit.
 
-**Die Bestandszeile ist die Auskunft — nicht selbst erschließen, wie ein Titel zu
-bekommen ist.** Jeder Treffer trägt genau eines dieser Label:
+**Die Bestandszeile ist die Auskunft — nicht selbst erschließen, wie ein Titel
+zu bekommen ist.** Das Label aus der Werkzeugausgabe unverändert in die Spalte
+„Bestand" übernehmen. Keine eigene Fernleihspalte: ob Fernleihe in Frage kommt,
+steht im Label. So sieht eine fertige Trefferliste aus:
 
-| Label | Was es heißt | Was du dazu sagst |
-|---|---|---|
-| ✅ In der BHT-Bibliothek vorhanden | gedruckt im Bestand | ausleihbar; `[OPAC]`-Link für Signatur und Verfügbarkeit |
-| ✅ Für die BHT lizenziert (E-Ressource) | lizenziertes E-Book | über die BHT zugänglich, ggf. Campus-Netz oder VPN |
-| 🌐 Frei zugänglicher Volltext | Open Access | direkt lesbar, **Volltextlink übernehmen** — keine Ausleihe, keine Fernleihe |
-| 🔒 Lizenzpflichtige E-Ressource, für die BHT nicht nachgewiesen | E-Ressource ohne BHT-Lizenz | **nicht fernleihfähig** — nicht als Fernleihe anbieten; Erwerbungsvorschlag oder Alternative nennen |
-| ℹ️ Nicht in der BHT, im Verbund nachgewiesen | gedruckt in einer anderen KOBV-Bibliothek | Fernleihe über das KOBV-Portal |
-| ❔ Kein Besitznachweis im Datensatz | Bestand ungeklärt | als ungeklärt kennzeichnen — **nicht** als Fernleihfall behaupten |
+| # | Titel (Jahr) | Verfasser / Verlag | Bestand | Link |
+|---|---|---|---|---|
+| 1 | Kohlenstoff in versiegelten und entsiegelten Böden in Berlin (2023) | Thrum, Klemm, Korintenberg u. a. — HU Berlin | 🌐 Frei zugänglicher Volltext | [Volltext](http://edoc.hu-berlin.de/18452/27457) |
+| 2 | Stadtböden. Entwicklungen, Belastungen, Bewertung und Planung (1991) | Pietsch, Kamieth — Blottner | ✅ In der BHT-Bibliothek vorhanden | [OPAC](https://webopac.bht-berlin.de/webOPACClient.bhssis/start.do?Query=540=%223893670041%22) |
+| 3 | Unsere Böden entdecken. Die verborgene Vielfalt unter Feldern und Wiesen (2025) | Don, Prietz — Springer | ✅ Für die BHT lizenziert (E-Ressource) | [Volltext](https://doi.org/10.1007/978-3-662-71765-3) |
+| 4 | Urbane Böden (1998) | Hiller, Meuser — Springer | 🔒 Lizenzpflichtige E-Ressource, für die BHT nicht nachgewiesen | [Verlagsseite](https://doi.org/10.1007/978-3-642-72064-2) |
+| 5 | Anforderungen an die Wiederherstellung von Bodenfunktionen nach Entsiegelung (2001) | Gaßner — Umweltbundesamt Berlin | ℹ️ Nicht in der BHT, im Verbund nachgewiesen (→ Fernleihe möglich) | — |
+| 6 | Verkehrsflächenüberbauung (o. J.) | — | ❔ Kein Besitznachweis im Datensatz | — |
 
-Fehlt die Bestandszeile ganz, ist das ein Fehler in der Werkzeugausgabe und kein
-Freibrief zum Raten: dann den Bestand als ungeklärt ausweisen.
+Die sechs Label und was sie für die Beschaffung heißen: ✅ **vorhanden** →
+ausleihbar, ✅ **lizenziert** → über die BHT zugänglich (ggf. Campus-Netz oder
+VPN), 🌐 **frei** → direkt lesbar, 🔒 **lizenzpflichtig ohne BHT-Nachweis** →
+**nicht** fernleihfähig, E-Ressourcen werden nicht verliehen, ℹ️ **nur im
+Verbund** → Fernleihe über das KOBV-Portal, ❔ **kein Besitznachweis** →
+ungeklärt, und ungeklärt heißt nicht „nicht vorhanden": nicht als Fernleihfall
+behaupten. Fehlt die Bestandszeile ganz, ebenso verfahren.
 
 Wichtig: Der KOBV-Verbundkatalog enthält **keine** Standortsignatur. Gib deshalb
 **nicht** die PPN oder eine DDC/RVK-Klassifikation als „Signatur" aus — der
