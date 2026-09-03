@@ -133,7 +133,9 @@ entgegen.
 - **Komposita und Wortvarianten mitdenken** („Gebäudeautomation" /
   „Gebäudeautomatisierung") — der Katalog kann keine Trunkierung (siehe Stufe 1).
 - Kontrolliertes Vokabular in die deutsche Spalte; es speist die GND-Schlagwortsuche
-  in Stufe 1.
+  in Stufe 1. Fachtermini, die im Deutschen unübersetzt bleiben („Gamification",
+  „Building Information Modeling"), gehören in **beide** Spalten: Im Katalog sind
+  sie kein Schlagwort, aber ein Titelwort — Stufe 1 sucht sie über den Titel.
 
 **Fachvokabular — Empfehlung an die Person, kein Arbeitsschritt.** Nenne bei
 einschlägigen Themen die passende Thesaurus-Quelle. Der Skill kann diese Thesauri
@@ -155,10 +157,34 @@ verwendest und warum.
 Der Katalog liefert Lehrbücher, Handbücher, etablierte Werke, vorrangig den an der
 BHT verfügbaren Bestand. Suchbegriffe aus Stufe 0, vorrangig deutsche Spalte.
 
-- **Beginne mit der Schlagwortsuche:** `opac_suche`, `suchtyp="subject"`,
-  `nur_bht_bestand=true`, `max_treffer` 12–15. Sie nutzt das kontrollierte
-  Vokabular (GND) und ist deutlich präziser als `"any"`, bei dem sich thematisch
-  lose Treffer in die vorderen Ränge mischen.
+- **Den Zugriff nach Begriffstyp wählen, nicht pauschal mit `"subject"`
+  beginnen.** `nur_bht_bestand=true`, `max_treffer` 12–15. Welcher `suchtyp`
+  trägt, hängt daran, ob der Begriff im Normvokabular angesetzt ist:
+  - **Etablierter, aber mehrdeutiger Allgemeinbegriff** („Lernmotivation",
+    „Bürgerbeteiligung", „Nachhaltiges Bauen") → `suchtyp="subject"`. Hier trägt
+    die GND, und Freitext ertrinkt: „Lernmotivation" als Schlagwort ergab 14
+    Treffer, praktisch alle einschlägig.
+  - **Distinktiver Fachterminus, meist jung und oft englisch** („Gamification",
+    „Building Information Modeling", „Deskilling") → `suchtyp="title"` oder
+    `"any"`, deutsche und englische Schreibvarianten per ` OR `. Der Begriff ist
+    von sich aus eindeutig; die Schlagwortsuche kostet hier Recall, ohne
+    Präzision zu gewinnen: „Gamification" ergab als Schlagwort **17** Treffer,
+    als Titelsuche mit Varianten **32**, über alle Felder **43**.
+- **Warum die Schlagwortsuche gerade die neueren Titel verliert.** Der Katalog
+  mischt Datenherkünfte. Verbundaufnahmen (Kennung `b3kat_…`) tragen deutsche
+  GND-Schlagwörter; die Aufnahmen aus den lizenzierten E-Book-Paketen
+  (`almahu_…`, `almatuudk_…`, `edocfu_…`) tragen stattdessen die englischen
+  Fachkategorien des Verlags. Eine GND-Schlagwortsuche filtert damit
+  unbeabsichtigt fast die gesamte E-Book-Ebene weg — den Teil des Bestands, in
+  dem die Literatur der letzten Jahre liegt. Zwei Belege aus einer Recherche zu
+  Gamification: „The gamification of learning and instruction" (Kapp 2012) ist
+  als „Lernspiel · Trainingsmethode" verschlagwortet und führt *Gamification*
+  nur im Titel; „Gamification in der Hochschullehre" (Körner u. a. 2024) trägt
+  ausschließlich Springer-Kategorien. Beide sind für eine Schlagwortsuche nach
+  *Gamification* unsichtbar — und beide sind die einschlägigsten Titel des
+  Bestands. Dass derselben Autorengruppe der Band von 2025 ein
+  *Gamification*-Schlagwort bekam und der von 2024 nicht, zeigt, wie wenig
+  verlässlich die Verschlagwortung ist.
 - **Die Trefferliste ist nicht relevanzsortiert** — die angezeigten N sind die
   ersten N von vielen. Deshalb 12–15 scannen und die einschlägigsten **selbst
   auswählen**, statt die ersten fünf zu übernehmen. Kriterien: Passung von Titel
@@ -176,6 +202,23 @@ deren Synonyme (ODER), Anführungszeichen erzwingen eine Phrase.
   zu eng — er indexiert Titel und Schlagwörter, keine Volltexte. Synonyme dagegen
   kosten nichts: Sie vergrößern die Treffermenge, statt sie zu verkleinern.
 - Deutsche und englische Fassung eines Konzepts gehören in denselben Block.
+- **Zwei Konzepte nie in `"any"` kombinieren.** Dort wirkt jedes Konzept als
+  harter UND-Filter über einen metadatenarmen Datensatz, in dem sich zwei
+  Konzepte fast nie treffen: `Gamification OR Gamifizierung OR "Serious Game";
+  Motivation OR Lernmotivation` ergab über alle Felder **1** Treffer — schlechter
+  als jede der beiden Einzelsuchen. Die Blocksuche gehört in `"subject"` und
+  `"title"`; bei `"any"` ein Konzept pro Anfrage.
+- **Generische Wörter nicht in die Titelsuche geben.** `Spiel OR spielerisch;
+  Lernen OR Unterricht` ergab als Titelsuche 28 Treffer, überwiegend
+  Programmierlehrbücher („Java will nur spielen", „spielerisch programmieren
+  lernen") — an einer technischen Hochschule ist „spielerisch lernen" ein
+  Verlagsslogan für Einsteigerbände. Solche Wörter gehören ins Schlagwortfeld
+  oder gar nicht in die Anfrage.
+- **Findet keine Kombination die Schnittmenge, jedes Konzept einzeln suchen und
+  die Schnittmenge beim Lesen bilden.** Bei einem Katalog ohne Volltextindex ist
+  das für ein Thema, das zwei Fächer verbindet, oft der einzige Weg. Eine
+  Kombination, die einen einzigen Treffer liefert, ist kein Befund über den
+  Bestand, sondern einer über die Anfrage.
 - **Keine Trunkierung:** `*` und `?` wirken nicht — der Katalog liest sie als
   Wortbestandteil, `Bildung*` findet dasselbe wie `Bildung`. Wortformen per ` OR `
   ausschreiben (`Bildung OR Bildungsforschung`).
@@ -209,6 +252,14 @@ Thema hat. In dieser Reihenfolge:
 3. Erst dann `suchtyp="any"`. Bei null Treffern sucht das Werkzeug von sich aus
    zusätzlich im Freitext und weist das im Ergebnis aus — diesen Hinweis
    übernehmen: Die Treffer sind dann weniger trennscharf als eine Schlagwortsuche.
+
+**Eine auffällig kleine Trefferliste ist derselbe Befund — nur unsichtbar.** Der
+automatische Freitext-Fallback greift nur bei **null** Treffern, nicht bei fünf
+oder siebzehn. Genau dort wäre er am nötigsten: Eine Schlagwortsuche, die 17 statt
+43 Titeln zurückgibt, sieht erfolgreich aus und ist es nicht. Deshalb bei jedem
+distinktiven Fachterminus `suchtyp="title"` gegenprüfen, bevor du eine
+Bestandslücke meldest — und erst recht, bevor du der Person sagst, die Bibliothek
+habe zu ihrem Thema nichts.
 
 Diesen Schritt **sichtbar machen**: Er führt den Unterschied zwischen freiem und
 kontrolliertem Vokabular an einem echten Fehlschlag vor.
@@ -502,7 +553,7 @@ ausführen.
 ### `r` — Noch eine Suchrunde
 
 `r` ist die Runde, in der gesucht wird — und zwar **in beiden Stufen**: erst der
-Katalog (Schlagwortsuche wie in Stufe 1, als Blocksuche), dann die Fachdatenbanken
+Katalog (Zugriff nach Begriffstyp wie in Stufe 1, als Blocksuche), dann die Fachdatenbanken
 (wie in Stufe 2). Beide Trefferlisten kommen als Tabelle, jede mit ihrer
 Quellenzeile.
 
