@@ -145,10 +145,10 @@ entgegen.
   Paper-Quellen überwiegend englisch.
 - **Komposita und Wortvarianten mitdenken** („Gebäudeautomation" /
   „Gebäudeautomatisierung") — der Katalog kann keine Trunkierung (siehe Stufe 1).
-- Kontrolliertes Vokabular in die deutsche Spalte; es speist die GND-Schlagwortsuche
-  in Stufe 1. Fachtermini, die im Deutschen unübersetzt bleiben („Gamification",
-  „Building Information Modeling"), gehören in **beide** Spalten: Im Katalog sind
-  sie kein Schlagwort, aber ein Titelwort — Stufe 1 sucht sie über den Titel.
+- Kontrolliertes Vokabular in die deutsche Spalte. Fachtermini, die im Deutschen
+  unübersetzt bleiben („Gamification", „Building Information Modeling"), gehören in
+  **beide** Spalten. Welchen Katalogzugriff die Tabelle bekommt, entscheidet Stufe 1
+  an der Trefferlage — hier nur sammeln, nicht vorsortieren.
 - **Block 1 ist das spezifischste Konzept, Block 2 der Kontext.** Mit diesen beiden
   sucht Stufe 1; mehr als zwei Konzepte nimmt der Katalog nicht an. Weitere Blöcke
   sind Reserve: Sie gehören in den Recherchestand unter „Noch offen" und kommen in
@@ -595,9 +595,8 @@ ausführen.
 ### `r` — Noch eine Suchrunde
 
 `r` ist die Runde, in der gesucht wird — und zwar **in beiden Stufen**: erst der
-Katalog (Zugriff nach Begriffstyp wie in Stufe 1, als Blocksuche), dann die Fachdatenbanken
-(wie in Stufe 2). Beide Trefferlisten kommen als Tabelle, jede mit ihrer
-Quellenzeile.
+Katalog (Verfahren wie in Stufe 1), dann die Fachdatenbanken (wie in Stufe 2). Beide
+Trefferlisten kommen als Tabelle, jede mit ihrer Quellenzeile.
 
 Den Katalog auch dann abfragen, wenn die vorangegangenen Runden nur Paper geliefert
 haben. Sonst bleibt die Grundlagenliteratur zu den neuen Begriffen unentdeckt — und
@@ -702,9 +701,10 @@ zusätzlich in den Fachdatenbanken. Nennen, in welchen Treffern der Name vorkam.
 ### `w` — Breiter suchen
 
 In dieser Reihenfolge: weitere Synonyme per ` OR ` in die vorhandenen Blöcke → ein
-Konzept ganz weglassen → Oberbegriffe statt enger Begriffe → Freitext statt
-Schlagwort → über den BHT-Bestand hinaus in den KOBV-Verbund → in der Paper-Stufe
-fachpassende weitere Datenbanken zuschalten. Die ersten beiden Schritte wirken am
+Konzept ganz weglassen → Oberbegriffe statt enger Begriffe → den Katalogzugriff
+wechseln, den Stufe 1 nicht gewählt hat (Schlagwort ↔ Titel ↔ alle Felder) → über
+den BHT-Bestand hinaus in den KOBV-Verbund → in der Paper-Stufe fachpassende weitere
+Datenbanken zuschalten. Die ersten beiden Schritte wirken am
 stärksten und kosten nichts: Im Katalog verengt jedes zusätzliche Konzept, jedes
 Synonym erweitert.
 
