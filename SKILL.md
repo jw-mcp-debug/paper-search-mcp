@@ -8,6 +8,11 @@ user-invocable: true
 # Die quellenspezifischen search_*-Tools bitte nicht wieder aufnehmen — der Skill
 # rät in Stufe 2 ausdrücklich davon ab, sie als Retry nach einem Nullbefund zu
 # verwenden, und die Allowlist ist die einzige harte Durchsetzung dieser Regel.
+# search_unpaywall ist die eine Ausnahme und trotz des Namens kein Suchwerkzeug:
+# Es schlägt zu einer bekannten DOI den Open-Access-Status nach und ersetzt damit
+# das Raten am Verlagsnamen (Stufe 2, Spalte „Zugang"). Als Trefferquelle bleibt
+# es verboten.
+# get_crossref_paper_by_doi: Gegenprobe für OpenAIRE-DOIs (Grundprinzipien).
 # paper_referenzen/paper_zitiert_von: Zitationsverfolgung im s-Hotkey.
 # paper_verwandte bewusst NICHT gelistet — unzuverlässig (siehe p).
 # zeitschrift_profil: Kennzahlen einer Zeitschrift, nur auf Nachfrage.
@@ -17,6 +22,8 @@ allowed-tools:
   - opac_isbn_suche
   - kobv_verbund_suche
   - search_papers
+  - search_unpaywall
+  - get_crossref_paper_by_doi
   - paper_referenzen
   - paper_zitiert_von
   - zeitschrift_profil
@@ -61,10 +68,14 @@ und die Paper-Suche über mehrere Datenbanken.
 - **Lücken offenlegen, nicht auffüllen.** Null Treffer wird gesagt — aber prüfe
   vorher die Fehlermuster in Stufe 1 und 2: Die meisten Nullbefunde sind Vokabular-
   oder Verfügbarkeitsprobleme, keine echten Lücken.
-- **OpenAIRE-DOIs vor dem Zitieren prüfen.** OpenAIRE verschmilzt beim eigenen
-  Dedup gelegentlich zwei Werke zu einem Datensatz: DOI, URL und Autor*innen können
-  dann zu drei verschiedenen Arbeiten gehören. Im Zweifel über eine zweite Quelle
-  gegenprüfen. (Upstream-Problem, im Server nicht behebbar.)
+- **OpenAIRE-DOIs gegenprüfen.** OpenAIRE verschmilzt beim eigenen Dedup
+  gelegentlich zwei Werke zu einem Datensatz: DOI, URL und Autor*innen können dann
+  zu drei verschiedenen Arbeiten gehören. Deshalb: Stammt ein Treffer, den du in
+  eine Tabelle aufnimmst, aus `openaire` und trägt er eine DOI, rufe
+  `get_crossref_paper_by_doi` mit dieser DOI auf und vergleiche den Titel mit dem
+  der Trefferzeile. Weichen sie voneinander ab, nimm den Treffer nicht auf. Nur für
+  Zeilen, die tatsächlich in die Tabelle kommen — nicht für die ganze Trefferliste.
+  (Upstream-Problem, im Server nicht behebbar.)
 - **Keine Volltextbeschaffung.** Dieser Skill *findet* Literatur und liefert Links.
   Er ruft **keine** Download-/Read-Werkzeuge auf (kein `download_*`, kein `read_*`).
 
@@ -422,9 +433,16 @@ Tabelle, vor der Begründung.
   nie eine Tabelle ohne Links.
 - **Zit.** nur, wenn die Quelle eine Zahl liefert; sonst Feld leer lassen, nicht
   schätzen.
-- **Zugang:** Open Access (MDPI-Titel wie *Buildings* oder *Energies*, DOAJ, arXiv)
-  ist über den Link sofort lesbar; Verlagstitel hinter Paywall (Elsevier, Springer,
-  Wiley) laufen über die E-Ressourcen der BHT → „Lizenz (EZB)".
+- **Zugang: aus der Werkzeugausgabe, nicht aus dem Verlagsnamen.** „Open Access",
+  wenn der Treffer es selbst ausweist (`open_access`, `in_doaj`, `zeitschrift_oa`)
+  oder aus `doaj`, `arxiv` oder `europepmc` stammt. Sagt die Ausgabe nichts, für die
+  Zeilen der Tabelle `search_unpaywall` mit der DOI fragen. Bleibt es danach offen,
+  „Zugang über die DOI prüfen" schreiben und nichts behaupten; „Lizenz (EZB)" nur,
+  wenn eine Quelle den Titel als nicht frei ausweist.
+  **Nie vom Verlag auf den Zugang schließen.** Das wäre Trainingswissen und
+  verstößt gegen das erste Grundprinzip: Springer und Elsevier publizieren ebenso
+  Open Access, wie MDPI- oder DOAJ-Titel einzeln hinter einer Schranke stehen
+  können.
 
 Unter der Tabelle in zwei bis drei Sätzen: welche thematischen Stränge die Auswahl
 abdeckt, und — mit je einem Halbsatz — was aussortiert wurde und warum. Das gehört
@@ -758,6 +776,12 @@ gewickelt. Jeder Treffer trägt eine Bestandszeile; sie füllt die Spalte
   — `sources` ist der Weg zu den einzelnen Datenbanken; Crossref, CORE, OpenAIRE und
   die übrigen sind Parameterwerte, keine eigenen Aufrufe. Welches Set wann, steht in
   Stufe 2.
+
+Nachschlagen zu einer bekannten DOI (nie als Trefferquelle):
+
+- `get_crossref_paper_by_doi(doi)` — Gegenprobe für OpenAIRE-Treffer, siehe
+  Grundprinzipien.
+- `search_unpaywall(doi)` — Open-Access-Status für die Spalte „Zugang" in Stufe 2.
 
 Zitationsverfolgung (nur `s`, nur mit DOI oder OpenAlex-ID):
 
