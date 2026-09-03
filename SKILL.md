@@ -1,5 +1,5 @@
 ---
-name: agentische-recherche
+name: bht-library-research
 description: "Mehrstufige wissenschaftliche Literaturrecherche an der BHT, die den Rechercheprozess sichtbar macht: erst Suchbegriffstabelle, dann BHT-Bibliothekskatalog (OPAC/KOBV) für Grundlagen, dann Fachdatenbanken für aktuelle Forschung, dann Synthese. Unbedingt verwenden, sobald jemand nach Literatur, Quellen, Papers, Fachbüchern, einem Forschungsstand oder Material für eine Haus-, Bachelor- oder Masterarbeit fragt – auch wenn das Wort 'Recherche' gar nicht fällt. Typische Auslöser: 'recherchiere Literatur zu …', 'systematische Literaturrecherche zu …', 'was gibt es zu … in der Bibliothek'. Unterstützt Folgebefehle (Hotkeys): 'r' bzw. 'another round' für die nächste Suchrunde in Katalog und Fachdatenbanken, 'p' bzw. 'pearl' für die Begriffsernte aus den besten Treffern, 's' bzw. 'schneeball' für die Zitationsverfolgung rückwärts und vorwärts, 'a' für Autorensuche, 'w' breiter."
 user-invocable: true
 # Bewusst nur die Tools, die dieser Skill aufruft. Crossref, Semantic Scholar,
@@ -29,7 +29,7 @@ allowed-tools:
   - zeitschrift_profil
 ---
 
-# Agentische Recherche (BHT Campusbibliothek)
+# BHT Bibliotheksrecherche
 
 ## Zweck
 

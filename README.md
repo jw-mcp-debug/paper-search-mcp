@@ -12,7 +12,7 @@ server**:
 The project is a fork of [openags/paper-search-mcp](https://github.com/openags/paper-search-mcp)
 with the OPAC/KOBV tools folded in, so that one connector serves both the catalog
 and the paper databases. It is intended to be deployed once (as a remote MCP
-connector) and used through Claude with the staged `agentische-recherche` workflow.
+connector) and used through Claude with the staged `bht-library-research` workflow.
 
 ![Python](https://img.shields.io/badge/python-3.10+-blue.svg) ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
@@ -50,7 +50,7 @@ foundational books, then the **paper databases** for current research. Both tool
 groups live on the same server process and are exposed over **streamable-HTTP**, so
 the whole thing is added to Claude as a single custom connector.
 
-The intended interaction pattern is the `agentische-recherche` skill: OPAC first
+The intended interaction pattern is the `bht-library-research` skill: OPAC first
 (German foundational literature, BHT holdings), then targeted paper search (current
 research), then a synthesis with source links.
 
@@ -253,7 +253,7 @@ table records.
 >
 > Note on the download/read columns: these reflect upstream capability. Downloads are
 > restricted to legally free material (see [Scope](#scope-legal-sources-only)); the
-> `agentische-recherche` workflow itself only calls the search tools.
+> `bht-library-research` workflow itself only calls the search tools.
 
 ---
 
