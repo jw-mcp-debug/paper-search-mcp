@@ -455,7 +455,7 @@ diesen Spalten:
 |---|---|---|---|---|
 | [Energy efficiency in cloud data centers: a survey](DOI-Link) | Katal u. a. | Cluster Computing 2022 | 472 | Open Access |
 | [Mesoclimatic effects on data centre siting](DOI-Link) | Turek, Radgen | Energies 2021 | 14 | Open Access |
-| [Liquid cooling for high-density racks](DOI-Link) | Chainer u. a. | IBM J. Res. Dev. 2017 | 96 | Lizenz (EZB) |
+| [Liquid cooling for high-density racks](DOI-Link) | Chainer u. a. | IBM J. Res. Dev. 2017 | 96 | Kein Open Access |
 | [Crossref-Treffer ohne Open-Access-Feld](DOI-Link) | … | Konferenzband 2023 | | Zugang über die DOI prüfen |
 
 *Quelle: Crossref, OpenAlex, Semantic Scholar* — Pflichtzeile direkt unter der
@@ -471,8 +471,10 @@ Tabelle, vor der Begründung.
 - **Zugang: nur aus dem Open-Access-Feld des Treffers, ohne zusätzliche Aufrufe.**
   „Open Access" nur, wenn der Treffer es selbst ausweist (`open_access: true`,
   `in_doaj`, `zeitschrift_oa`) oder aus `doaj`, `arxiv` oder `europepmc` stammt.
-  „Lizenz (EZB)" nur, wenn eine Quelle den Titel ausdrücklich als nicht frei
-  ausweist (`open_access: false`). **In allen anderen Fällen „Zugang über die DOI
+  „Kein Open Access" nur, wenn eine Quelle den Titel ausdrücklich als nicht frei
+  ausweist (`open_access: false`). Ob die BHT ihn lizenziert hat, weiß die
+  Trefferausgabe nicht — darum steht in der Spalte kein „Lizenz", und der Weg
+  über die E-Ressourcen der BHT gehört in den Schlusshinweis. **In allen anderen Fällen „Zugang über die DOI
   prüfen"** — das ist der Normalfall für Crossref- und Semantic-Scholar-Treffer,
   die kein Open-Access-Feld tragen. Kein Nachschlagen per Werkzeug, um die Lücke
   zu schließen.
@@ -808,9 +810,11 @@ der Verfügbarkeitsspalte aus Stufe 1:
   Standort) · 🌐 direkt über den Volltextlink · ℹ️ Fernleihe über das KOBV-Portal ·
   🔒 nicht fernleihfähig, E-Ressourcen werden nicht verliehen (dann einen
   Erwerbungsvorschlag oder eine Alternative aus der Trefferliste nennen).
-- **Artikel:** Open Access direkt über die DOI; lizenzpflichtige und solche mit
-  „Zugang über die DOI prüfen" über die E-Ressourcen der BHT (EZB/DBIS, bei Bedarf
-  Shibboleth oder VPN), falls die DOI-Seite keinen freien Volltext anbietet.
+- **Artikel:** Open Access direkt über die DOI. Bei „Kein Open Access" und bei
+  „Zugang über die DOI prüfen" ohne freien Volltext auf der DOI-Seite: prüfen, ob
+  die BHT die Zeitschrift lizenziert hat — in der Elektronischen
+  Zeitschriftenbibliothek (EZB) bzw. im Datenbank-Infosystem (DBIS), Zugriff von
+  außen per Shibboleth oder VPN. Ist sie nicht lizenziert, bleibt die Fernleihe.
 - **Zeitschriftenkennzahlen:** Die BHT lizenziert weder Web of Science noch die
   Journal Citation Reports; ein Journal Impact Factor ist darüber nicht verfügbar.
 
