@@ -8,10 +8,8 @@ user-invocable: true
 # Die quellenspezifischen search_*-Tools bitte nicht wieder aufnehmen — der Skill
 # rät in Stufe 2 ausdrücklich davon ab, sie als Retry nach einem Nullbefund zu
 # verwenden, und die Allowlist ist die einzige harte Durchsetzung dieser Regel.
-# search_unpaywall ist die eine Ausnahme und trotz des Namens kein Suchwerkzeug:
-# Es schlägt zu einer bekannten DOI den Open-Access-Status nach und ersetzt damit
-# das Raten am Verlagsnamen (Stufe 2, Spalte „Zugang"). Als Trefferquelle bleibt
-# es verboten.
+# search_unpaywall bewusst NICHT gelistet: Die Spalte „Zugang" kommt ohne
+# zusätzliche Aufrufe aus — was die Trefferausgabe nicht belegt, bleibt offen.
 # get_crossref_paper_by_doi: Gegenprobe für OpenAIRE-DOIs (Grundprinzipien).
 # paper_referenzen/paper_zitiert_von: Zitationsverfolgung im s-Hotkey.
 # paper_verwandte bewusst NICHT gelistet — unzuverlässig (siehe p).
@@ -22,7 +20,6 @@ allowed-tools:
   - opac_isbn_suche
   - kobv_verbund_suche
   - search_papers
-  - search_unpaywall
   - get_crossref_paper_by_doi
   - paper_referenzen
   - paper_zitiert_von
@@ -449,7 +446,7 @@ Aktiv auswählen anhand:
   *Grauliteratur-Rauschen* — Regierungs- und Behördenberichte (häufig über OSTI)
   treffen thematisch, tragen für eine Abschlussarbeit aber wenig bei.
 - **Ziel ist eine Mischung:** 2–3 Grundlagenarbeiten plus 2–3 aktuelle Arbeiten
-  (letzte ~3 Jahre, oft Open Access).
+  (letzte ~3 Jahre).
 
 **Gib die ausgewählten Treffer jetzt als Tabelle aus** — vor der Synthese, mit genau
 diesen Spalten:
@@ -458,26 +455,40 @@ diesen Spalten:
 |---|---|---|---|---|
 | [Energy efficiency in cloud data centers: a survey](DOI-Link) | Katal u. a. | Cluster Computing 2022 | 472 | Open Access |
 | [Mesoclimatic effects on data centre siting](DOI-Link) | Turek, Radgen | Energies 2021 | 14 | Open Access |
-| [Liquid cooling for high-density racks](DOI-Link) | Chainer u. a. | IBM J. Res. Dev. 2017 | 96 | Lizenz (EZB) |
+| [Liquid cooling for high-density racks](DOI-Link) | Chainer u. a. | IBM J. Res. Dev. 2017 | 96 | Kein Open Access |
+| [Crossref-Treffer ohne Open-Access-Feld](DOI-Link) | … | Konferenzband 2023 | | Zugang über die DOI prüfen |
 
 *Quelle: Crossref, OpenAlex, Semantic Scholar* — Pflichtzeile direkt unter der
 Tabelle, vor der Begründung.
 
 - **Der Titel selbst ist der Link**, auf die DOI im Format `https://doi.org/<doi>`.
   Liefert das Tool bereits eine volle URL, diese verwenden — nie nackte DOI-Strings,
-  nie eine Tabelle ohne Links.
+  nie eine Tabelle ohne Links. DOI und Link **zeilenweise** aus genau dem Treffer
+  übernehmen, zu dem die Zeile gehört; ein DOI-Präfix aus der Nachbarzeile ist
+  ein falscher Nachweis.
 - **Zit.** nur, wenn die Quelle eine Zahl liefert; sonst Feld leer lassen, nicht
   schätzen.
-- **Zugang: aus der Werkzeugausgabe, nicht aus dem Verlagsnamen.** „Open Access",
-  wenn der Treffer es selbst ausweist (`open_access`, `in_doaj`, `zeitschrift_oa`)
-  oder aus `doaj`, `arxiv` oder `europepmc` stammt. Sagt die Ausgabe nichts, für die
-  Zeilen der Tabelle `search_unpaywall` mit der DOI fragen. Bleibt es danach offen,
-  „Zugang über die DOI prüfen" schreiben und nichts behaupten; „Lizenz (EZB)" nur,
-  wenn eine Quelle den Titel als nicht frei ausweist.
-  **Nie vom Verlag auf den Zugang schließen.** Das wäre Trainingswissen und
-  verstößt gegen das erste Grundprinzip: Springer und Elsevier publizieren ebenso
-  Open Access, wie MDPI- oder DOAJ-Titel einzeln hinter einer Schranke stehen
-  können.
+- **Zugang: nur aus dem Open-Access-Feld des Treffers, ohne zusätzliche Aufrufe.**
+  „Open Access" nur, wenn der Treffer es selbst ausweist (`open_access: true`,
+  `in_doaj`, `zeitschrift_oa`) oder aus `doaj`, `arxiv` oder `europepmc` stammt.
+  „Kein Open Access" nur, wenn eine Quelle den Titel ausdrücklich als nicht frei
+  ausweist (`open_access: false`). Ob die BHT ihn lizenziert hat, weiß die
+  Trefferausgabe nicht — darum steht in der Spalte kein „Lizenz", und der Weg
+  über die E-Ressourcen der BHT gehört in den Schlusshinweis. **In allen anderen Fällen „Zugang über die DOI
+  prüfen"** — das ist der Normalfall für Crossref- und Semantic-Scholar-Treffer,
+  die kein Open-Access-Feld tragen. Kein Nachschlagen per Werkzeug, um die Lücke
+  zu schließen.
+  **`pdf_url` ist kein Beleg für Open Access.** Crossref liefert dort die
+  Volltext-Links der Verlage, die meist hinter einer Schranke liegen; Semantic
+  Scholar setzt dort auch bei gesperrten Titeln den DOI-Link ein. Eine URL mit
+  `pdf` im Pfad, ein `doi.org`-Link oder ein Verlagsportal sagen über den Zugang
+  nichts.
+  **Nie vom Verlag, vom Erscheinungsjahr oder von der URL-Form auf den Zugang
+  schließen.** Das wäre Trainingswissen und verstößt gegen das erste
+  Grundprinzip: Springer und Elsevier publizieren ebenso Open Access, wie MDPI-
+  oder DOAJ-Titel einzeln hinter einer Schranke stehen können. Ein falsches
+  „Open Access" schickt die Person an eine Paywall; „Zugang über die DOI prüfen"
+  kostet sie nur einen Klick.
 
 Unter der Tabelle in zwei bis drei Sätzen: welche thematischen Stränge die Auswahl
 abdeckt, und — mit je einem Halbsatz — was aussortiert wurde und warum. Das gehört
@@ -799,8 +810,11 @@ der Verfügbarkeitsspalte aus Stufe 1:
   Standort) · 🌐 direkt über den Volltextlink · ℹ️ Fernleihe über das KOBV-Portal ·
   🔒 nicht fernleihfähig, E-Ressourcen werden nicht verliehen (dann einen
   Erwerbungsvorschlag oder eine Alternative aus der Trefferliste nennen).
-- **Artikel:** Open Access direkt über die DOI; lizenzpflichtige über die
-  E-Ressourcen der BHT (EZB/DBIS, bei Bedarf Shibboleth oder VPN).
+- **Artikel:** Open Access direkt über die DOI. Bei „Kein Open Access" und bei
+  „Zugang über die DOI prüfen" ohne freien Volltext auf der DOI-Seite: prüfen, ob
+  die BHT die Zeitschrift lizenziert hat — in der Elektronischen
+  Zeitschriftenbibliothek (EZB) bzw. im Datenbank-Infosystem (DBIS), Zugriff von
+  außen per Shibboleth oder VPN. Ist sie nicht lizenziert, bleibt die Fernleihe.
 - **Zeitschriftenkennzahlen:** Die BHT lizenziert weder Web of Science noch die
   Journal Citation Reports; ein Journal Impact Factor ist darüber nicht verfügbar.
 
@@ -826,7 +840,6 @@ Nachschlagen zu einer bekannten DOI (nie als Trefferquelle):
 
 - `get_crossref_paper_by_doi(doi)` — Gegenprobe für OpenAIRE-Treffer, siehe
   Grundprinzipien.
-- `search_unpaywall(doi)` — Open-Access-Status für die Spalte „Zugang" in Stufe 2.
 
 Zitationsverfolgung (nur `s`, nur mit DOI oder OpenAlex-ID):
 
