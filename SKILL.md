@@ -474,10 +474,11 @@ Tabelle, vor der Begründung.
   „Kein Open Access" nur, wenn eine Quelle den Titel ausdrücklich als nicht frei
   ausweist (`open_access: false`). Ob die BHT ihn lizenziert hat, weiß die
   Trefferausgabe nicht — darum steht in der Spalte kein „Lizenz", und der Weg
-  über die E-Ressourcen der BHT gehört in den Schlusshinweis. **In allen anderen Fällen „Zugang über die DOI
-  prüfen"** — das ist der Normalfall für Crossref- und Semantic-Scholar-Treffer,
-  die kein Open-Access-Feld tragen. Kein Nachschlagen per Werkzeug, um die Lücke
-  zu schließen.
+  über die E-Ressourcen der BHT gehört in den Schlusshinweis.
+  **In allen anderen Fällen „Zugang über die DOI prüfen"** — das ist der
+  Normalfall für Crossref- und Semantic-Scholar-Treffer, die kein
+  Open-Access-Feld tragen. Kein Nachschlagen per Werkzeug, um die Lücke zu
+  schließen.
   **`pdf_url` ist kein Beleg für Open Access.** Crossref liefert dort die
   Volltext-Links der Verlage, die meist hinter einer Schranke liegen; Semantic
   Scholar setzt dort auch bei gesperrten Titeln den DOI-Link ein. Eine URL mit
