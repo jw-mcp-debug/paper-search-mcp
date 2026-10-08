@@ -1,6 +1,5 @@
 requests
 feedparser
-fastmcp
 pypdf
 # mcp 2.x hat FastMCP zu MCPServer umbenannt und mcp.server.fastmcp
 # entfernt; server.py importiert von dort. Ohne Obergrenze installiert

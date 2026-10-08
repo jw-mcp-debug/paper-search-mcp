@@ -15,6 +15,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > names, parameters, and result formats may still change between minor versions.
 
 ---
+## [0.7.2] – 2026-10-08
+
+Fehlerbehebungen aus dem Abgleich mit upstream: Zenodo- und HAL-Treffer
+nennen ihre Autoren wieder lesbar, die arXiv-Suche verknüpft Suchwörter mit UND
+und meldet Ausfälle, statt eine leere Liste zu liefern, und eine ungenutzte
+Abhängigkeit ohne Versionsgrenze ist entfernt.
+
+**Upgrading:** nichts zu tun. Die Tool-Liste, die Parameter und ihre
+Beschreibungen sind unverändert — der Connector muss nicht neu geladen werden.
+
+### Fixed
+
+- **Zenodo und HAL zerlegten die Autorenzeile in einzelne Buchstaben.** Beide
+  fügten die Namen zu einem String zusammen; `Paper._format_authors` geht die
+  Autoren aber als Liste durch und kappt nach `MAX_AUTHORS`. Aus „Mausberg,
+  Samuel" wurde so `M; a; u u. a. (n=16)`, aus zwei HAL-Autoren
+  `R; e; d u. a. (n=38)` — live gemessen, in jeder Sammelsuche mit diesen
+  Quellen. Beide liefern jetzt eine Liste. Zusätzlich wickelt `Paper` einen
+  übergebenen String in eine Liste, damit eine künftige Quelle denselben
+  Fehler nicht wieder einschleppt. Upstream hat das in #115 behoben.
+- **arXiv band nur das erste Suchwort.** `all:machine learning` liest arXiv
+  als `all:machine` und ein lose angehängtes `learning`: 543.419 Treffer
+  gegenüber 353.065 für `all:machine AND all:learning`. Mehrwortanfragen ohne
+  eigene Syntax werden jetzt UND-verknüpft. Upstream quotet sie stattdessen
+  als Phrase (#115); das ist für die Anfragen aus mehreren Konzepten, die ein
+  Rechercheagent schreibt, viel zu eng — gemessen:
+
+  | Anfrage | Phrase | UND |
+  |---|---:|---:|
+  | large language models education | 2 | 2.650 |
+  | deskilling artificial intelligence | 0 | 28 |
+  | machine learning | 347.550 | 353.065 |
+
+  Bei zwei Wörtern, die ohnehin eine Wendung sind, liegen beide Formen nah
+  beieinander. Anfragen mit Anführungszeichen, Feldpräfixen (`ti:`, `au:`,
+  `cat:` …) oder `AND`/`OR`/`ANDNOT` gehen unverändert durch.
+- **arXiv meldete Ausfälle als „keine Treffer".** Jeder Status außer 200 endete
+  nach den Wiederholungen in einer leeren Liste — 503, 429, ein
+  Verbindungsabbruch und eine Anfrage, zu der arXiv schlicht nichts hat, sahen
+  gleich aus. Jetzt wird jeder Fehlschlag gemeldet und landet in
+  `search_papers` unter `errors`. Dieselbe Klasse Fehler, die bei Semantic
+  Scholar und dblp schon behoben ist.
+- **arXiv-Antworten mit Status 406 und gültigem Feed werden angenommen.** arXiv
+  liefert gelegentlich vollständige Ergebnisse mit 406 (upstream #121). Die
+  Antwort wird nur akzeptiert, wenn sie ein nichtleerer, wohlgeformter
+  arXiv-Atom-Feed ist, dessen Einträge sich alle verarbeiten lassen; sonst
+  zählt sie als Fehlschlag. Übernommen aus upstream #125.
+- **Der arXiv-Mindestabstand galt nur pro Thread.** Die Wartezeit von drei
+  Sekunden hing an der Instanz und war nicht gesperrt: Zwei Sitzungen auf dem
+  Render-Server konnten denselben alten Zeitstempel lesen und gleichzeitig
+  anfragen. Sperre und Zeitstempel sind jetzt prozessweit. Übernommen aus
+  upstream #119 (ursprünglich #81 von @visez).
+- **arXiv-IDs im alten Schema behalten ihr Archiv.** `hep-th/9901001` wurde zu
+  `9901001` verkürzt und war damit keine gültige Kennung mehr.
+- **arXiv wird über HTTPS abgefragt.**
+- **`fastmcp` ist aus den Abhängigkeiten entfernt.** Der Server importiert es
+  nirgends — er nutzt `mcp.server.fastmcp` aus dem `mcp`-Paket. Das Paket stand
+  aber ohne Versionsgrenze in `requirements.txt` und wurde bei jedem
+  Render-Build in der jeweils neuesten Version installiert, samt 34
+  Paketen, die nur es selbst braucht. Das ist dieselbe Lage, die bei `mcp` zu 0.7.1 geführt
+  hat, nur für etwas, das niemand braucht.
+
+### Added
+
+- `tests/test_author_lists.py` (5 Fälle) und 15 neue Fälle in
+  `tests/test_arxiv_rate_limit.py`: Fehlermeldung statt leerer Liste, 406 mit
+  und ohne gültigen Feed, gemeinsamer Takt zwischen Instanzen, keine
+  überlappenden Anfragen aus mehreren Threads, Anfrageaufbau, alte IDs. Alle
+  netzfrei; gegen den Stand von 0.7.1 schlagen 14 der 18 arXiv-Fälle fehl.
+
+---
 ## [0.7.1] – 2026-09-02
 
 Jeder Katalogtreffer sagt jetzt, wie er zu bekommen ist: im BHT-Bestand, frei im
