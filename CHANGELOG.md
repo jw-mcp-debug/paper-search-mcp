@@ -15,18 +15,100 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > names, parameters, and result formats may still change between minor versions.
 
 ---
-## [0.7.2] – 2026-10-08
+## [0.8.0] – 2026-10-17
 
-Fehlerbehebungen aus dem Abgleich mit upstream: Zenodo- und HAL-Treffer
-nennen ihre Autoren wieder lesbar, die arXiv-Suche verknüpft Suchwörter mit UND
-und meldet Ausfälle, statt eine leere Liste zu liefern, und eine ungenutzte
-Abhängigkeit ohne Versionsgrenze ist entfernt.
+OpenAlex vergibt seit Oktober 2026 Schlagwörter aus Titel und Abstract — auch
+für deutschsprachige Arbeiten, auf Englisch. Dieser Stand nutzt das zweimal:
+Treffer tragen diese Schlagwörter statt der alten, oft falschen Concepts, und
+ein neues Tool übersetzt ein Thema in das englische Suchvokabular, mit dem die
+Paper-Quellen tatsächlich indexieren. Dazu: ein OpenAlex-Filter (Jahr, Sprache)
+in der Sammelsuche, die ACM Digital Library ohne Key, und OpenAlex meldet
+Ausfälle, statt null Treffer vorzutäuschen.
 
-**Upgrading:** nichts zu tun. Die Tool-Liste, die Parameter und ihre
-Beschreibungen sind unverändert — der Connector muss nicht neu geladen werden.
+Version 0.7.2 wurde nie veröffentlicht; ihre Fehlerbehebungen aus dem Abgleich
+mit upstream sind hier enthalten (unter *Fixed*, ab „Zenodo und HAL“).
+
+**Upgrading:** Connector neu laden. Zwei Tools kommen hinzu
+(`begriffe_vorschlagen`, `search_acm`), `search_papers` und `search_openalex`
+haben einen neuen Parameter, und alle Tools tragen jetzt Annotationen. Wer
+`PAPER_SEARCH_MCP_ENABLED_TOOLS` setzt, nimmt `begriffe_vorschlagen` auf, wenn
+der BHT-Skill es nutzen soll. `PAPER_SEARCH_MCP_ACM_API_KEY` wird nicht mehr
+gelesen.
+
+### Added
+
+- **`begriffe_vorschlagen(text)`** — englische Fachbegriffe zu einem Thema in
+  beliebiger Sprache, aus dem OpenAlex-Schlagwortbestand (1,88 Mio. Begriffe):
+  „Wärmepumpen im Altbau" ergibt *heat pumps* (37.705 Arbeiten), *old
+  buildings*, *building retrofit*. Je Begriff Relevanz, Zahl der Arbeiten und
+  Schreibvarianten für ODER-Blöcke, dazu engere Varianten (*high-temperature
+  heat pumps*). Varianten nur zu Begriffen mit höchstens 50.000 Arbeiten — zu
+  *artificial intelligence* lieferte die Autovervollständigung *… in
+  healthcare*, zu *accessibility* *chromatin accessibility*. Ein Aufruf kostet
+  0,01 $ (zehnmal eine Suche), deshalb Prozess-Cache und Längenprüfung vor dem
+  Request; fällt die Anreicherung aus, bleiben die schon bezahlten Begriffe.
+  Der Skill ruft es einmal in Stufe 0 auf, für die Englisch-Spalte der
+  Suchbegriffstabelle, die bisher nur die eigene Übersetzung des Modells hatte.
+- **`openalex_filter`** in `search_papers` (und `filter` in `search_openalex`),
+  analog zu `crossref_filter`: `publication_year:>2020`, `language:de`, mehrere
+  Bedingungen mit Komma. Der Skill musste bisher sagen, dass der Jahresfilter nur
+  Semantic Scholar erreicht. Nach upstream #79 (kalomak).
+- **ACM Digital Library ohne Key** (`sources="acm"`, `search_acm`). Die DL ist
+  seit 1. Januar 2026 Open Access und hat keine Such-API; der Key, auf den der
+  Connector wartete, kommt nie — und das Gerüst warf auch mit Key
+  `NotImplementedError`. Gesucht wird über OpenAlex mit dem DOI-Präfix 10.1145.
+  Upstream (#123, #128) nimmt dasselbe Präfix über Crossref; gemessen an vier
+  Informatik-Anfragen, je Top 8, trug Crossref bei 2 von 32 Treffern einen
+  Abstract, OpenAlex bei 30 von 32 — ACM liefert Crossref Abstracts für
+  Zeitschriftenartikel, kaum für Tagungsbände, und die sind der Großteil.
+  `openalex_filter` wirkt auch hier.
+- **Annotationen für alle Tools** (`readOnlyHint`, `destructiveHint: false`,
+  `openWorldHint`). Claude führt read-only-Tools getrennt und kann sie ohne
+  Rückfrage freigeben; LibreChat verwirft Annotationen, bevor die Tool-Liste das
+  Modell erreicht. Die Katalog-Tools behalten ihre eigenen. Nach upstream #86,
+  #120 (Peter Lemenkov).
+- Tests: `test_begriffe_vorschlagen.py` (9), `test_openalex_keywords.py` (4),
+  `test_openalex_filter.py` (9), `test_acm.py` (5, ersetzt die Gerüst-Tests),
+  `test_tool_annotations.py` (2).
+- Aus 0.7.2: `tests/test_author_lists.py` (5 Fälle) und 15 neue Fälle in
+  `tests/test_arxiv_rate_limit.py`: Fehlermeldung statt leerer Liste, 406 mit
+  und ohne gültigen Feed, gemeinsamer Takt zwischen Instanzen, keine
+  überlappenden Anfragen aus mehreren Threads, Anfrageaufbau, alte IDs. Alle
+  netzfrei; gegen den Stand von 0.7.1 schlagen 14 der 18 arXiv-Fälle fehl.
+
+### Changed
+
+- **OpenAlex-Treffer tragen `keywords` statt `categories`.** Die Concepts waren
+  aus Topics abgeleitet und gerade bei deutscher Literatur unbrauchbar:
+  „Fachkräftemangel im Handwerk? – Eine Spurensuche" trug *Political science;
+  Humanities; Philosophy*, ein anderer Aufsatz *Gynecology*. Jetzt: *skilled
+  labor shortage; apprenticeship; small business* — englische Begriffe für eine
+  deutsche Arbeit, genau das, was die Begriffsernte (`p`) braucht. Die fünf
+  besten nach Score; ein Werk ohne Schlagwörter bekommt keine Ersatzbegriffe.
+  Rund 6 % mehr Ausgabe je `search_papers`-Aufruf.
+- **Der Suchparameter bleibt `search`, nicht `search.title_abstract_keywords`.**
+  Gemessen an 19 Anfragen, Top 10 blind bewertet: Präzision 0,84 gegenüber 0,88,
+  7 bis 10 der Top 10 identisch. Das Keyword-Feld verlangt aber jedes Wort in
+  Titel oder Abstract, und seine Schlagwörter sind englisch: „Wärmepumpe Altbau"
+  findet dort 0 Arbeiten, hier 59.
+- **`mcp[cli]>=1.27.2,<2`** (vorher `>=1.6.0`); der Lock steht auf 1.30.0. Nach
+  upstream #87, #132. Über stdio mit echtem Client geprüft.
+- SKILL.md: Stufe 0 nutzt `begriffe_vorschlagen`, `p` das Feld `keywords`,
+  Stufe 2 `openalex_filter` und `acm`.
 
 ### Fixed
 
+- **OpenAlex meldete Ausfälle als „keine Treffer".** Jeder fehlgeschlagene
+  Request endete in einer leeren Liste: erschöpftes Budget (HTTP 409), Drosselung
+  (429), Zeitüberschreitung. In `search_papers` stand dann `openalex: 0` — genau
+  der Fall, den der Skill laut seiner Fehlertabelle nie als Befund lesen darf,
+  den das Tool aber nicht erkennbar machte. Ein vertippter Filter wäre
+  dazugekommen.
+  Jetzt landet jeder Ausfall mit Grund unter `errors`, etwa
+  `HTTP 400 (languag is not a valid field)` — gekürzt vor der Liste aller
+  gültigen Felder, die OpenAlex anhängt.
+- **Der Hinweis auf das Budget ohne Key stimmte nicht.** Ohne Key gibt es
+  0,10 $ pro Tag und IP, bei 0,001 $ je Suche also rund 100 Suchen, nicht 10.
 - **Zenodo und HAL zerlegten die Autorenzeile in einzelne Buchstaben.** Beide
   fügten die Namen zu einem String zusammen; `Paper._format_authors` geht die
   Autoren aber als Liste durch und kappt nach `MAX_AUTHORS`. Aus „Mausberg,
@@ -77,13 +159,12 @@ Beschreibungen sind unverändert — der Connector muss nicht neu geladen werden
   Paketen, die nur es selbst braucht. Das ist dieselbe Lage, die bei `mcp` zu 0.7.1 geführt
   hat, nur für etwas, das niemand braucht.
 
-### Added
+### Removed
 
-- `tests/test_author_lists.py` (5 Fälle) und 15 neue Fälle in
-  `tests/test_arxiv_rate_limit.py`: Fehlermeldung statt leerer Liste, 406 mit
-  und ohne gültigen Feed, gemeinsamer Takt zwischen Instanzen, keine
-  überlappenden Anfragen aus mehreren Threads, Anfrageaufbau, alte IDs. Alle
-  netzfrei; gegen den Stand von 0.7.1 schlagen 14 der 18 arXiv-Fälle fehl.
+- `download_acm` und `read_acm_paper` (registriert nur mit ACM-Key, funktionslos).
+  Beschaffung ist seit 0.7.0 nicht Aufgabe dieses Servers, und dl.acm.org beantwortet
+  skriptgesteuerte PDF-Abrufe mit einer Cloudflare-Prüfung.
+- `PAPER_SEARCH_MCP_ACM_API_KEY` aus `.env.example` und README.
 
 ---
 ## [0.7.1] – 2026-09-02

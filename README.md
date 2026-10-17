@@ -95,12 +95,17 @@ can retrieve it.
     - **Journal metrics**: `zeitschrift_profil` — publisher, access route and
     OpenAlex citation statistics for a journal. Deliberately not the Clarivate
     Journal Impact Factor; see [Journal Metrics](#journal-metrics).
+    - **Search vocabulary**: `begriffe_vorschlagen` — English OpenAlex keywords for
+    a topic described in any language; see [Search Vocabulary](#search-vocabulary).
 - **BHT holdings filter**: catalog searches are filtered to the BHT stock via
   ISIL `DE-B768` (Bib-1 attribute 1044), with an option to widen to the full KOBV
   union catalog for interlibrary loan.
 - **Multi-source paper coverage**: arXiv, PubMed, IACR ePrint, Semantic Scholar,
   Crossref, OpenAlex, PMC, CORE, Europe PMC, dblp, OpenAIRE, DOAJ, BASE, Zenodo,
-  HAL, Unpaywall (DOI lookup). bioRxiv and medRxiv are opt-in: they list a
+  HAL, ACM Digital Library (keyless, via OpenAlex), Unpaywall (DOI lookup).
+  `search_papers` takes a `crossref_filter` and an `openalex_filter`
+  (`publication_year:>2020`, `language:de`); OpenAlex hits carry the keywords
+  OpenAlex assigns from title and abstract. bioRxiv and medRxiv are opt-in: they list a
   category, they do not search — Europe PMC indexes their preprints and searches
   them by keyword.
 - **Standardized output**: papers are returned in a consistent dictionary format.
@@ -178,6 +183,17 @@ response; set it on for term harvesting (pearl growing).
 > [Credential & API Key Requirements](#credential--api-key-requirements)).
 > `paper_referenzen` costs two requests per call, the others one to two. Without a
 > key, OpenAlex allows ~100 credits/day and then returns HTTP 409.
+
+## Search Vocabulary
+
+`begriffe_vorschlagen(text)` takes a topic as a sentence in any language and returns
+the English keywords OpenAlex assigns to works on it — the vocabulary the paper
+sources index with. "Wärmepumpen im Altbau" gives *heat pumps* (37,705 works),
+*old buildings*, *building retrofit*; each term comes with its relevance to the
+text, its number of works and spelling variants, plus narrower variants of the two
+strongest specific terms. One call costs 0.01 USD of OpenAlex budget, ten times a
+search — with a key that is 100 calls a day, without one ten. Topics are cached per
+process; texts under 20 characters are refused before any request.
 
 ## Journal Metrics
 
@@ -284,11 +300,12 @@ without the variable is unaffected.
 
 This is a token measure, not a feature switch. The tool list is part of **every**
 request a client sends, whether it does research in that turn or not. The full set
-of 28 tools costs about 7,900 tokens per request; the eight the BHT research skill
-actually calls cost about 3,400:
+of 30 tools costs about 9,600 tokens per request (about 8,500 in clients such as
+LibreChat that drop tool annotations); the ten the BHT research skill actually calls
+cost about 4,300 (3,900):
 
 ```
-PAPER_SEARCH_MCP_ENABLED_TOOLS=opac_suche,opac_autor_suche,opac_isbn_suche,kobv_verbund_suche,search_papers,paper_referenzen,paper_zitiert_von,zeitschrift_profil
+PAPER_SEARCH_MCP_ENABLED_TOOLS=opac_suche,opac_autor_suche,opac_isbn_suche,kobv_verbund_suche,search_papers,get_crossref_paper_by_doi,paper_referenzen,paper_zitiert_von,zeitschrift_profil,begriffe_vorschlagen
 ```
 
 Search coverage is untouched: `search_papers` keeps querying every source in

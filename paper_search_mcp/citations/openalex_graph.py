@@ -11,7 +11,7 @@ zehntausendfach zitiert sein kann.
 
 Kreditverbrauch beachten: Seit dem 13.02.2026 verlangt die OpenAlex-API einen
 (kostenlosen) API-Key; der frühere "polite pool" über den mailto-Parameter
-existiert nicht mehr. Ohne Key sind es ca. 100 Credits/Tag. Jede Funktion hier
+existiert nicht mehr. Ohne Key sind es 0,10 $ pro Tag und IP (rund 100 Anfragen). Jede Funktion hier
 kostet 1–3 Requests — siehe die Docstrings.
 
 Der Key wird über dieselben Umgebungsvariablen gelesen wie in
@@ -95,7 +95,8 @@ def hole_json(url: str, params: Dict) -> Dict:
     if antwort.status_code == 409:
         raise OpenAlexFehler(
             "OpenAlex-Kreditkontingent erschöpft (HTTP 409). Ohne API-Key sind es "
-            "ca. 100 Credits pro Tag. Key in PAPER_SEARCH_MCP_OPENALEX_API_KEY setzen."
+            "0,10 $ pro Tag und IP, rund 100 Anfragen. Key in "
+            "PAPER_SEARCH_MCP_OPENALEX_API_KEY setzen."
         )
     if antwort.status_code == 429:
         raise OpenAlexFehler("OpenAlex-Rate-Limit erreicht (HTTP 429). Später erneut versuchen.")
