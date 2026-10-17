@@ -1,113 +1,46 @@
-"""ACM Digital Library connector — optional, requires API key env.
+"""ACM Digital Library connector — keyless, served from OpenAlex.
 
-This module is a **skeleton only**.  No real ACM DL API requests are made
-unless the ``PAPER_SEARCH_MCP_ACM_API_KEY`` (or legacy ``ACM_API_KEY``)
-environment variable is configured.  All methods
-raise :class:`NotImplementedError` with a descriptive message when accessed
-without a valid key so that the rest of the platform continues to work without
-any paid credentials.
+Since 1 January 2026 the ACM Digital Library is entirely open access, and ACM
+offers no public search API, so the API key this connector used to wait for
+does not exist. (The skeleton it replaces raised NotImplementedError even with
+a key.) Search runs over OpenAlex restricted to ACM's DOI prefix (``10.1145``),
+which covers every ACM-published work.
 
-Enable usage::
+Upstream (#123/#128) took the same prefix route over Crossref. Measured
+2026-10-17 on four computer-science queries, top 8 each: Crossref carried an
+abstract for 2 of 32 hits, OpenAlex for 30 of 32. ACM deposits abstracts with
+Crossref for journal articles but hardly ever for proceedings, and proceedings
+(CHI, SIGCSE, RecSys …) are most of what ACM publishes. Restricting Crossref to
+journal articles brings the abstracts back and loses exactly those papers.
 
-    export PAPER_SEARCH_MCP_ACM_API_KEY=<your_acm_api_key>
-
-.. note::
-    ACM recently opened a limited metadata API.  Check
-    https://libraries.acm.org/digital-library/acm-open for Open Access content
-    that does NOT require a key.  Full-text/PDF download requires ACM membership
-    or institutional access.
+No downloads: retrieval left this server in 0.7.0, and dl.acm.org answers
+scripted PDF requests with a Cloudflare challenge anyway.
 """
 
 from __future__ import annotations
 
-import logging
 from typing import List
 
-from .base import PaperSource
+from .openalex import OpenAlexSearcher
 from ..paper import Paper
-from ..config import get_env
 
-logger = logging.getLogger(__name__)
-
-_NOT_CONFIGURED_MSG = (
-    "ACM Digital Library is not configured.  Set PAPER_SEARCH_MCP_ACM_API_KEY "
-    "(or legacy ACM_API_KEY) environment "
-    "variable to enable ACM DL search.  "
-    "See https://libraries.acm.org/digital-library/acm-open for access options."
-)
+ACM_DOI_PREFIX = "10.1145"
 
 
-class ACMSearcher(PaperSource):
-    """Skeleton connector for ACM Digital Library.
+class ACMSearcher(OpenAlexSearcher):
+    """ACM Digital Library search via OpenAlex's DOI-prefix filter."""
 
-    Instantiating this class without ``PAPER_SEARCH_MCP_ACM_API_KEY``
-    (or ``ACM_API_KEY``) set will log a warning
-    but will NOT raise an error.  All actual operations raise
-    :class:`NotImplementedError` with a clear message directing the user to
-    configure their API key.
-    """
+    PAGE_URL_TEMPLATE = "https://dl.acm.org/doi/{doi}"
 
-    # ACM DL base URL (placeholder — real endpoint TBD once API key is available)
-    BASE_URL = "https://dl.acm.org/action/doSearch"
-
-    def __init__(self) -> None:
-        self.api_key: str = get_env("ACM_API_KEY", "")
-        if not self.api_key:
-            logger.warning(
-                "ACMSearcher initialised without PAPER_SEARCH_MCP_ACM_API_KEY/ACM_API_KEY.  "
-                "All calls will raise NotImplementedError until the key is set."
-            )
-
-    # ------------------------------------------------------------------
-    # Public helpers
-    # ------------------------------------------------------------------
-
-    def is_configured(self) -> bool:
-        """Return True only when a non-empty ACM API key is available."""
-        return bool(self.api_key)
-
-    # ------------------------------------------------------------------
-    # PaperSource interface
-    # ------------------------------------------------------------------
-
-    def search(self, query: str, max_results: int = 10, **kwargs) -> List[Paper]:  # type: ignore[override]
-        """Search ACM Digital Library — requires PAPER_SEARCH_MCP_ACM_API_KEY or ACM_API_KEY.
-
-        Raises:
-            NotImplementedError: Always, when ACM API key env is not set.
-        """
-        if not self.is_configured():
-            raise NotImplementedError(_NOT_CONFIGURED_MSG)
-
-        # TODO: implement real ACM DL API call here once key is available
-        raise NotImplementedError(
-            "ACM DL search is not yet implemented.  "
-            "Contribute at https://github.com/your-repo/paper-search-mcp."
+    def search(self, query: str, max_results: int = 10, filter: str = "") -> List[Paper]:
+        prefix = f"doi_starts_with:{ACM_DOI_PREFIX}"
+        filter = (filter or "").strip()
+        papers = super().search(
+            query, max_results=max_results,
+            filter=f"{prefix},{filter}" if filter else prefix,
         )
-
-    def download_pdf(self, paper_id: str, save_path: str = "./downloads") -> str:
-        """Download a PDF from ACM DL — requires ACM API key env and institutional access.
-
-        Raises:
-            NotImplementedError: Always, until key + download logic are implemented.
-        """
-        if not self.is_configured():
-            raise NotImplementedError(_NOT_CONFIGURED_MSG)
-
-        raise NotImplementedError(
-            "ACM DL PDF download is not yet implemented.  "
-            "Note: full-text access also requires ACM membership or institutional access."
-        )
-
-    def read_paper(self, paper_id: str, save_path: str = "./downloads") -> str:
-        """Read paper content from ACM DL — requires ACM API key env.
-
-        Raises:
-            NotImplementedError: Always, until download + extraction are implemented.
-        """
-        if not self.is_configured():
-            raise NotImplementedError(_NOT_CONFIGURED_MSG)
-
-        raise NotImplementedError(
-            "ACM DL paper reading is not yet implemented."
-        )
+        for paper in papers:
+            paper.source = "acm"
+            if paper.doi:
+                paper.url = self.PAGE_URL_TEMPLATE.format(doi=paper.doi)
+        return papers

@@ -373,8 +373,8 @@ Fachdatenbanken mit Zeitschriftenartikeln.
 | Grundstock, alle Fächer | `openalex,semantic,crossref` |
 | + Bau, Umwelt, Maschinenbau | `openaire` — europäische Konferenz- und Repositorienliteratur (z. B. WCTE), sonst nirgends auffindbar |
 | + Life Sciences, Verfahrenstechnik | `europepmc` — **nicht** `pubmed`, **nicht** `pmc`; die bioRxiv- und medRxiv-Preprints stecken hier mit drin |
-| + Informatik | `arxiv`, `dblp` |
-| + sobald API-Keys gesetzt | `ieee`, `acm` |
+| + Informatik | `acm`, `arxiv`, `dblp` |
+| + sobald ein API-Key gesetzt ist | `ieee` |
 
 Die Achse ist **Grundstock + fachliche Ergänzung**, nicht Fach → Quellenliste: die
 Quellen unterscheiden sich vor allem in der Metadatenqualität, nicht in der
@@ -393,6 +393,9 @@ Fünf Dinge, die man beim Auswerten wissen muss:
   entsprechend thematisch danebenliegende Treffer ohne Abstract.
 - **dblp findet gut, aber screent schlecht:** keine Abstracts, keine
   Zitationszahlen. Für die Auswahl in dieser Stufe fehlen damit beide Signale.
+  `acm` gleicht das für ACM-Konferenzen und -Zeitschriften aus: Es sucht über
+  OpenAlex und bringt auch bei Konferenzbeiträgen Abstract und Zitationszahl mit;
+  `openalex_filter` wirkt dort ebenfalls.
 - **`biorxiv` und `medrxiv` nicht in die Quellenliste nehmen.** Beide haben keine
   Stichwortsuche, sondern listen nur eine Kategorie der letzten 30 Tage; sie sind
   deshalb auch nicht Teil von `sources="all"`. Ihre Preprints erreicht `europepmc`,

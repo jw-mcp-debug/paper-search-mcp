@@ -177,12 +177,11 @@ OPT_IN_SOURCES = [
 
 
 # ---------------------------------------------------------------------------
-# Optional paid-platform connectors (disabled by default)
-# Set PAPER_SEARCH_MCP_IEEE_API_KEY / PAPER_SEARCH_MCP_ACM_API_KEY to activate
-# (legacy IEEE_API_KEY / ACM_API_KEY are also supported).
+# Optional paid-platform connector (disabled by default)
+# Set PAPER_SEARCH_MCP_IEEE_API_KEY (legacy IEEE_API_KEY) to activate.
+# ACM needs no key since 0.8.0: the DL is open access and searched via OpenAlex.
 # ---------------------------------------------------------------------------
 _ieee_api_key = get_env("IEEE_API_KEY", "")
-_acm_api_key = get_env("ACM_API_KEY", "")
 
 if _ieee_api_key:
     from .academic_platforms.ieee import IEEESearcher
@@ -192,13 +191,9 @@ if _ieee_api_key:
 else:
     ieee_searcher = None
 
-if _acm_api_key:
-    from .academic_platforms.acm import ACMSearcher
-    acm_searcher = ACMSearcher()
-    ALL_SOURCES.append("acm")
-    logger.info("ACM Digital Library enabled via configured environment key.")
-else:
-    acm_searcher = None
+from .academic_platforms.acm import ACMSearcher
+acm_searcher = ACMSearcher()
+ALL_SOURCES.append("acm")
 
 
 def _parse_sources(sources: str) -> List[str]:
@@ -315,8 +310,9 @@ async def search_papers(
         query: Search query string.
         max_results_per_source: Max results to fetch from each selected source.
         sources: Comma-separated source names or 'all'.
-            Available: arxiv,pubmed,iacr,semantic,crossref,openalex,pmc,core,europepmc,dblp,openaire,doaj,base,zenodo,hal,unpaywall
-            (ieee and acm are added automatically when their API keys are configured)
+            Available: arxiv,pubmed,iacr,semantic,crossref,openalex,pmc,core,europepmc,dblp,openaire,doaj,base,zenodo,hal,unpaywall,acm
+            acm: ACM Digital Library (keyless, via OpenAlex; openalex_filter applies)
+            (ieee is added automatically when its API key is configured)
             biorxiv and medrxiv only on explicit request: they list a category,
             they do not search, and europepmc indexes their preprints
         year: Optional year filter for Semantic Scholar only.
@@ -325,8 +321,8 @@ async def search_papers(
         crossref_filter: CrossRef filter applied inside the aggregation, e.g.
             'type:journal-article' or 'from-pub-date:2020-01-01'.
         openalex_filter: OpenAlex filter applied inside the aggregation, e.g.
-            'publication_year:>2020' or 'language:de'. Unlike year, which
-            only reaches Semantic Scholar.
+            'publication_year:>2020' or 'language:de'. Applies to openalex and
+            acm; year, by contrast, only reaches Semantic Scholar.
     Returns:
         Aggregated dictionary with per-source stats, errors, and deduplicated papers.
     """
@@ -389,8 +385,9 @@ async def search_papers(
             if ieee_searcher is not None:
                 task_map[source] = async_search(ieee_searcher, query, max_results_per_source)
         elif source == "acm":
-            if acm_searcher is not None:
-                task_map[source] = async_search(acm_searcher, query, max_results_per_source)
+            task_map[source] = search_acm(
+                query, max_results_per_source, filter=openalex_filter
+            )
 
     source_names = list(task_map.keys())
     source_outputs = await asyncio.gather(
@@ -795,44 +792,24 @@ if ieee_searcher is not None:
 
 
 # ---------------------------------------------------------------------------
-# Optional ACM Digital Library tools — registered only when API key is set
+# ACM Digital Library — keyless since 0.8.0
 # ---------------------------------------------------------------------------
-if acm_searcher is not None:
-    @mcp.tool()
-    async def search_acm(query: str, max_results: int = 10) -> List[Dict]:
-        """Search ACM Digital Library for papers.  Requires PAPER_SEARCH_MCP_ACM_API_KEY (or ACM_API_KEY).
+@mcp.tool()
+async def search_acm(query: str, max_results: int = 10, filter: str = "") -> List[Dict]:
+    """Search the ACM Digital Library (open access since 2026, no key needed).
 
-        Args:
-            query: Search query string.
-            max_results: Maximum number of results (default: 10).
-        Returns:
-            List of paper dicts from ACM DL.
-        """
-        return await async_search(acm_searcher, query, max_results)
+    Served from OpenAlex restricted to ACM's DOI prefix 10.1145, so conference
+    papers come with abstracts and citation counts.
 
-    @mcp.tool()
-    async def download_acm(paper_id: str, save_path: str = "./downloads") -> str:
-        """Download a PDF from ACM Digital Library.  Requires PAPER_SEARCH_MCP_ACM_API_KEY (or ACM_API_KEY) and institutional access.
-
-        Args:
-            paper_id: ACM DL paper identifier.
-            save_path: Directory to save the PDF (default: './downloads').
-        Returns:
-            str: Path to saved PDF or error message.
-        """
-        return await asyncio.to_thread(acm_searcher.download_pdf, paper_id, save_path)
-
-    @mcp.tool()
-    async def read_acm_paper(paper_id: str, save_path: str = "./downloads") -> str:
-        """Download and read an ACM Digital Library paper.  Requires PAPER_SEARCH_MCP_ACM_API_KEY (or ACM_API_KEY).
-
-        Args:
-            paper_id: ACM DL paper identifier.
-            save_path: Directory where the PDF is/will be saved (default: './downloads').
-        Returns:
-            str: Extracted text content.
-        """
-        return acm_searcher.read_paper(paper_id, save_path)
+    Args:
+        query: Search query string.
+        max_results: Maximum number of results (default: 10).
+        filter: Additional OpenAlex works filter, e.g. 'publication_year:>2020'.
+    Returns:
+        List of paper dicts.
+    """
+    extra = {"filter": filter.strip()} if (filter or "").strip() else {}
+    return await async_search(acm_searcher, query, max_results, **extra)
 
 _SCHEMA_CONTAINER_KEYS = ("items", "additionalProperties", "not")
 _SCHEMA_LIST_KEYS = ("anyOf", "oneOf", "allOf", "prefixItems")
