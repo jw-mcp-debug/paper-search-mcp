@@ -88,6 +88,10 @@ register_citation_tools(mcp)
 from paper_search_mcp.journals.tools import register_journal_tools
 register_journal_tools(mcp)
 
+# adding search vocabulary (OpenAlex keywords)
+from paper_search_mcp.begriffe.tools import register_begriffe_tools
+register_begriffe_tools(mcp)
+
 logger = logging.getLogger(__name__) 
 
 # Instances of searchers
