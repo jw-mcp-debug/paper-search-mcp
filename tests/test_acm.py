@@ -1,73 +1,67 @@
-"""Tests for ACM Digital Library optional skeleton connector."""
-import os
+"""ACM Digital Library ohne Key, über OpenAlex mit DOI-Präfix 10.1145.
+
+Der Request ist gemockt. Geprüft wird, dass der Präfixfilter immer gesetzt ist
+und ein zusätzlicher Filter ihn ergänzt statt ersetzt, dass Treffer als ACM
+gekennzeichnet sind, und dass ACM ohne jede Konfiguration registriert ist —
+ohne die Download- und Lesetools, die der alte Connector anbot.
+"""
+import asyncio
 import unittest
-import unittest.mock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from paper_search_mcp import server
+from paper_search_mcp.academic_platforms.acm import ACMSearcher
+
+WERK = {
+    "id": "https://openalex.org/W1",
+    "title": "Teach AI How to Code",
+    "doi": "https://doi.org/10.1145/3613904.3642349",
+    "abstract_inverted_index": {"Teachable": [0], "agents": [1]},
+    "open_access": {},
+}
 
 
-class TestACMDisabledByDefault(unittest.TestCase):
-    """Verify ACM DL skeleton is disabled when ACM_API_KEY is not set."""
-
-    def setUp(self):
-        self._original = os.environ.pop("ACM_API_KEY", None)
-
-    def tearDown(self):
-        if self._original is not None:
-            os.environ["ACM_API_KEY"] = self._original
-        else:
-            os.environ.pop("ACM_API_KEY", None)
-
-    def test_is_not_configured_without_key(self):
-        from paper_search_mcp.academic_platforms.acm import ACMSearcher
-        searcher = ACMSearcher()
-        self.assertFalse(searcher.is_configured())
-
-    def test_search_raises_not_implemented_without_key(self):
-        from paper_search_mcp.academic_platforms.acm import ACMSearcher
-        searcher = ACMSearcher()
-        with self.assertRaises(NotImplementedError) as ctx:
-            searcher.search("distributed systems")
-        self.assertIn("ACM_API_KEY", str(ctx.exception))
-
-    def test_download_raises_not_implemented_without_key(self):
-        from paper_search_mcp.academic_platforms.acm import ACMSearcher
-        searcher = ACMSearcher()
-        with self.assertRaises(NotImplementedError) as ctx:
-            searcher.download_pdf("3458817.3476175")
-        self.assertIn("ACM_API_KEY", str(ctx.exception))
-
-    def test_read_raises_not_implemented_without_key(self):
-        from paper_search_mcp.academic_platforms.acm import ACMSearcher
-        searcher = ACMSearcher()
-        with self.assertRaises(NotImplementedError) as ctx:
-            searcher.read_paper("3458817.3476175")
-        self.assertIn("ACM_API_KEY", str(ctx.exception))
-
-    def test_not_in_all_sources_without_key(self):
-        """acm must NOT appear in ALL_SOURCES when the key is absent."""
-        import importlib
-        import paper_search_mcp.server as srv_module
-        importlib.reload(srv_module)
-        self.assertNotIn("acm", srv_module.ALL_SOURCES)
+def _sucher():
+    antwort = MagicMock(status_code=200)
+    antwort.json.return_value = {"results": [WERK]}
+    sucher = ACMSearcher()
+    sucher.session = MagicMock()
+    sucher.session.get.return_value = antwort
+    return sucher
 
 
-class TestACMIsConfiguredWithKey(unittest.TestCase):
-    """Verify ACM DL skeleton reports configured when ACM_API_KEY is present."""
+class TestACMSearcher(unittest.TestCase):
+    def test_praefixfilter_immer_gesetzt(self):
+        sucher = _sucher()
+        sucher.search("llm programming education", max_results=5)
+        self.assertEqual(sucher.session.get.call_args.kwargs["params"]["filter"],
+                         "doi_starts_with:10.1145")
 
-    def test_is_configured_with_key(self):
-        # Use the prefixed key so it takes priority over any empty value loaded from .env
-        with unittest.mock.patch.dict(os.environ, {"PAPER_SEARCH_MCP_ACM_API_KEY": "dummy_test_key"}):
-            from paper_search_mcp.academic_platforms.acm import ACMSearcher
-            searcher = ACMSearcher()
-            self.assertTrue(searcher.is_configured())
+    def test_zusatzfilter_ergaenzt_den_praefix(self):
+        sucher = _sucher()
+        sucher.search("q", filter="publication_year:>2020")
+        self.assertEqual(sucher.session.get.call_args.kwargs["params"]["filter"],
+                         "doi_starts_with:10.1145,publication_year:>2020")
 
-    def test_search_raises_not_implemented_even_with_key(self):
-        """Real search logic is ToD; should still raise NotImplementedError."""
-        with unittest.mock.patch.dict(os.environ, {"PAPER_SEARCH_MCP_ACM_API_KEY": "dummy_test_key"}):
-            from paper_search_mcp.academic_platforms.acm import ACMSearcher
-            searcher = ACMSearcher()
-            with self.assertRaises(NotImplementedError) as ctx:
-                searcher.search("consensus algorithms")
-            self.assertNotIn("ACM_API_KEY", str(ctx.exception))
+    def test_treffer_sind_acm_mit_dl_link(self):
+        paper = _sucher().search("q")[0]
+        self.assertEqual(paper.source, "acm")
+        self.assertEqual(paper.url, "https://dl.acm.org/doi/10.1145/3613904.3642349")
+        self.assertTrue(paper.abstract)
+
+
+class TestRegistrierung(unittest.TestCase):
+    def test_ohne_key_registriert_und_in_all(self):
+        namen = {t.name for t in asyncio.run(server.mcp.list_tools())}
+        self.assertIn("search_acm", namen)
+        self.assertNotIn("download_acm", namen)
+        self.assertNotIn("read_acm_paper", namen)
+        self.assertIn("acm", server.ALL_SOURCES)
+
+    def test_search_papers_gibt_openalex_filter_an_acm(self):
+        with patch.object(server, "search_acm", AsyncMock(return_value=[])) as gemockt:
+            asyncio.run(server.search_papers("q", sources="acm", openalex_filter="language:en"))
+        self.assertEqual(gemockt.call_args.kwargs["filter"], "language:en")
 
 
 if __name__ == "__main__":

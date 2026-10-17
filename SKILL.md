@@ -14,6 +14,7 @@ user-invocable: true
 # paper_referenzen/paper_zitiert_von: Zitationsverfolgung im s-Hotkey.
 # paper_verwandte bewusst NICHT gelistet — unzuverlässig (siehe p).
 # zeitschrift_profil: Kennzahlen einer Zeitschrift, nur auf Nachfrage.
+# begriffe_vorschlagen: Englisch-Spalte der Suchbegriffstabelle, einmal in Stufe 0.
 allowed-tools:
   - opac_suche
   - opac_autor_suche
@@ -24,6 +25,7 @@ allowed-tools:
   - paper_referenzen
   - paper_zitiert_von
   - zeitschrift_profil
+  - begriffe_vorschlagen
 ---
 
 # BHT Bibliotheksrecherche
@@ -151,6 +153,23 @@ entgegen.
   sind Reserve: Sie gehören in den Recherchestand unter „Noch offen" und kommen in
   einer `r`-Runde dran. Ohne diese Festlegung greift jede Runde zu anderen zwei
   Blöcken, und die Trefferlagen sind nicht mehr vergleichbar.
+
+**Englische Spalte aus dem OpenAlex-Vokabular.** Vor dem Ausfüllen **einmal**
+`begriffe_vorschlagen` aufrufen, mit dem Thema als Satz in der Sprache der Anfrage
+(„Wärmepumpen im Altbau“, nicht „Wärmepumpe“). Das Tool liefert die englischen
+Schlagwörter, die OpenAlex Arbeiten zu diesem Thema zuordnet — das Vokabular, mit
+dem die Paper-Quellen tatsächlich indexieren, statt einer eigenen Übersetzung.
+
+- Begriffe mit passender Bedeutung in die Englisch-Spalte des jeweiligen Blocks,
+  `synonyme` dazu (ODER im Block), `varianten` in die Spalte „Enger".
+- `werke` zeigt, wie viel ein Begriff trägt: unter etwa 100 Arbeiten ist er als
+  alleiniger Suchbegriff zu eng, über etwa 100.000 nur als Kontextblock brauchbar
+  („artificial intelligence", „higher education").
+- Fachfremdes verwerfen. Die Schlagwörter vergibt ein Modell; sie sind kein
+  Thesaurus („Hochschulen für angewandte Wissenschaften" ergab einmal „applied
+  science" statt „universities of applied sciences").
+- Ein Aufruf je Recherche, nicht je Block; er kostet zehnmal so viel wie eine
+  Suche. Bei Fehler oder leerer Liste die Spalte wie gewohnt selbst füllen.
 
 **Fachvokabular — Empfehlung an die Person, kein Arbeitsschritt.** Nenne bei
 einschlägigen Themen die passende Thesaurus-Quelle. Der Skill kann diese Thesauri
@@ -354,8 +373,8 @@ Fachdatenbanken mit Zeitschriftenartikeln.
 | Grundstock, alle Fächer | `openalex,semantic,crossref` |
 | + Bau, Umwelt, Maschinenbau | `openaire` — europäische Konferenz- und Repositorienliteratur (z. B. WCTE), sonst nirgends auffindbar |
 | + Life Sciences, Verfahrenstechnik | `europepmc` — **nicht** `pubmed`, **nicht** `pmc`; die bioRxiv- und medRxiv-Preprints stecken hier mit drin |
-| + Informatik | `arxiv`, `dblp` |
-| + sobald API-Keys gesetzt | `ieee`, `acm` |
+| + Informatik | `acm`, `arxiv`, `dblp` |
+| + sobald ein API-Key gesetzt ist | `ieee` |
 
 Die Achse ist **Grundstock + fachliche Ergänzung**, nicht Fach → Quellenliste: die
 Quellen unterscheiden sich vor allem in der Metadatenqualität, nicht in der
@@ -374,6 +393,9 @@ Fünf Dinge, die man beim Auswerten wissen muss:
   entsprechend thematisch danebenliegende Treffer ohne Abstract.
 - **dblp findet gut, aber screent schlecht:** keine Abstracts, keine
   Zitationszahlen. Für die Auswahl in dieser Stufe fehlen damit beide Signale.
+  `acm` gleicht das für ACM-Konferenzen und -Zeitschriften aus: Es sucht über
+  OpenAlex und bringt auch bei Konferenzbeiträgen Abstract und Zitationszahl mit;
+  `openalex_filter` wirkt dort ebenfalls.
 - **`biorxiv` und `medrxiv` nicht in die Quellenliste nehmen.** Beide haben keine
   Stichwortsuche, sondern listen nur eine Kategorie der letzten 30 Tage; sie sind
   deshalb auch nicht Teil von `sources="all"`. Ihre Preprints erreicht `europepmc`,
@@ -382,7 +404,7 @@ Fünf Dinge, die man beim Auswerten wissen muss:
   IP-Freischaltung, die nicht vorliegt; die Quelle antwortet dauerhaft leer. Google
   Scholar und SSRN stehen auf dem Connector nicht zur Verfügung.
 
-Drei Parameter, die sich in dieser Stufe lohnen:
+Vier Parameter, die sich in dieser Stufe lohnen:
 
 - `crossref_filter="type:journal-article"` filtert Dissertationen, Proceedings und
   Verlagsartefakte aus dem Crossref-Anteil. In einem Testlauf zu „cross-laminated
@@ -392,9 +414,15 @@ Drei Parameter, die sich in dieser Stufe lohnen:
 - `abstract_chars` kürzt die Abstracts (Standard 600 Zeichen). Fürs Screening
   reichen die ersten Sätze; für die Begriffsernte im `p`-Hotkey `abstract_chars=0`
   setzen, sonst fehlt gerade das Vokabular aus dem hinteren Teil.
-- **Der Jahresfilter wirkt nur auf Semantic Scholar.** Zum Priorisieren aktueller
-  Arbeiten nutzbar, aber sage nie, die Trefferliste sei auf einen Zeitraum
-  eingegrenzt — für echte Aktualität in der Auswahl nach Erscheinungsjahr filtern.
+- `openalex_filter` filtert den OpenAlex-Anteil: `publication_year:>2020` für
+  aktuelle Arbeiten, `language:de` für deutschsprachige Literatur (greift auch bei englischer
+  Anfrage, weil viele deutsche Arbeiten englische Abstracts tragen), mehrere
+  Bedingungen mit Komma. Ein vertippter Filter kommt als Fehler unter `errors`
+  zurück, nicht als Nullbefund.
+- **`year` wirkt nur auf Semantic Scholar, `openalex_filter` nur auf OpenAlex.**
+  Crossref und die übrigen Quellen bleiben ungefiltert. Sage deshalb nie, die
+  ganze Trefferliste sei auf einen Zeitraum eingegrenzt — für echte Aktualität in
+  der Auswahl nach Erscheinungsjahr filtern.
 
 **Quellenfehler und Drosselung.** „Keine Treffer" und „hat nicht geantwortet" sind
 zwei verschiedene Aussagen und werden nie vermischt: Ein gedrosseltes Ergebnis als
@@ -670,7 +698,11 @@ bevor sie eine Suche bestimmen.
 Zuerst die 3–5 inhaltlich stärksten Treffer wählen und **benennen, warum gerade
 diese**. Daraus die Begriffe ziehen, die in der Tabelle fehlten — aus Titel, Abstract
 und Schlagwörtern. Für den Katalog vor allem die GND-Schlagwörter der Katalogtreffer,
-für die Paper-Suche die englischen Fachtermini. Stammen die Abstracts aus einer Runde
+für die Paper-Suche die englischen Fachtermini. OpenAlex-Treffer tragen dafür das
+Feld `keywords`: englische Schlagwörter, die OpenAlex aus Titel und Abstract
+vergibt, **auch für deutschsprachige Arbeiten**. Gerade dort sind sie die Brücke
+zur Englisch-Spalte — „Fachkräftemangel im Handwerk? – Eine Spurensuche" trägt
+*skilled labor shortage; apprenticeship; small business*. Stammen die Abstracts aus einer Runde
 mit gekürzten Abstracts, die Suche mit `abstract_chars=0` wiederholen.
 
 Dann die **Suchbegriffstabelle aus Stufe 0 vollständig neu ausgeben**, die neuen
@@ -831,7 +863,7 @@ Die vier Katalog-Tools nehmen ihre Argumente **flach**, nicht in ein `params`-Ob
 gewickelt. Jeder Treffer trägt eine Bestandszeile; sie füllt die Spalte
 „Verfügbarkeit" und bestimmt den Beschaffungsweg (siehe Stufe 1).
 
-- `search_papers(query, sources="openalex,semantic,crossref", max_results_per_source=5, year=optional, abstract_chars=600, crossref_filter="")`
+- `search_papers(query, sources="openalex,semantic,crossref", max_results_per_source=5, year=optional, abstract_chars=600, crossref_filter="", openalex_filter="")`
   — `sources` ist der Weg zu den einzelnen Datenbanken; Crossref, CORE, OpenAIRE und
   die übrigen sind Parameterwerte, keine eigenen Aufrufe. Welches Set wann, steht in
   Stufe 2.
@@ -856,6 +888,12 @@ Zeitschrift:
 - `zeitschrift_profil(kennung)` — Kennzahlen und Zugangsstatus einer Zeitschrift.
   `kennung` nimmt ISSN, Zeitschriftennamen, OpenAlex-Source-ID oder Aufsatz-DOI.
   Nur auf Nachfrage aufrufen, nicht routinemäßig je Treffer.
+
+Vokabular (nur Stufe 0, einmal je Recherche):
+
+- `begriffe_vorschlagen(text)` — englische OpenAlex-Schlagwörter zu einem Thema in
+  beliebiger Sprache, je Begriff mit `relevanz`, `werke` und `synonyme`; dazu
+  `varianten` (engere Begriffe). `text` ist ein Satz, mindestens 20 Zeichen.
 
 Quellenspezifische `search_*` (z. B. `search_openalex`) existieren auf dem Server,
 werden hier aber **nicht** verwendet: Als Retry nach einem Nullbefund helfen sie

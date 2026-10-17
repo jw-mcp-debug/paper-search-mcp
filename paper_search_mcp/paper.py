@@ -50,6 +50,10 @@ class Paper:
         """Post-initialization to handle default values"""
         if self.authors is None:
             self.authors = []
+        elif isinstance(self.authors, str):
+            # A joined string would be split into single characters by every
+            # consumer that iterates the list, _format_authors included.
+            self.authors = [self.authors] if self.authors.strip() else []
         if self.categories is None:
             self.categories = []
         if self.keywords is None:

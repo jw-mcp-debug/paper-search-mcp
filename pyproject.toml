@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "paper-search-mcp"
-version = "0.7.1"
+version = "0.8.0"
 authors = [{ name = "P.S Zhang", email = "pengsongzhang96@gmail.com" }]
 description = "A MCP server for searching and downloading academic papers from multiple sources."
 readme = "README.md"
@@ -33,9 +33,8 @@ classifiers = [
 dependencies = [
     "requests",
     "feedparser",
-    "fastmcp",
     "pypdf",
-    "mcp[cli]>=1.6.0,<2",  # 2.x entfernt mcp.server.fastmcp, siehe requirements.txt
+    "mcp[cli]>=1.27.2,<2",  # 2.x entfernt mcp.server.fastmcp, siehe requirements.txt
     "beautifulsoup4>=4.12.0",
     "lxml>=4.9.0",
     "httpx[socks]>=0.28.1",

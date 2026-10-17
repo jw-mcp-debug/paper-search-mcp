@@ -20,8 +20,8 @@ class OpenAlexSearcher(PaperSource):
         self.session.headers.update({"User-Agent": "paper-search-mcp/1.0"})
 
         # Seit 13.02.2026 verlangt die OpenAlex-API einen (kostenlosen) API-Key.
-        # Ohne Key gibt es nur 100 Credits/Tag (eine Suche kostet 10) und danach
-        # HTTP 409 -> leere Trefferlisten. Der "polite pool" (mailto-Parameter)
+        # Ohne Key gibt es 0,10 $ pro Tag und IP (eine Suche kostet 0,001 $,
+        # also rund 100 Suchen) und danach HTTP 409 -> leere Trefferlisten. Der "polite pool" (mailto-Parameter)
         # wurde abgeschafft.
         # Key NICHT im Code hinterlegen, sondern als Umgebungsvariable setzen.
         self.api_key = (
@@ -33,8 +33,8 @@ class OpenAlexSearcher(PaperSource):
         if not self.api_key:
             logger.warning(
                 "Kein OpenAlex-API-Key gesetzt "
-                "(PAPER_SEARCH_MCP_OPENALEX_API_KEY). Die Suche ist auf ca. 10 "
-                "Anfragen pro Tag begrenzt und liefert danach keine Treffer mehr."
+                "(PAPER_SEARCH_MCP_OPENALEX_API_KEY). Die Suche ist auf ca. 100 "
+                "Anfragen pro Tag und IP begrenzt und liefert danach keine Treffer mehr."
             )
 
     def _reconstruct_abstract(self, inverted_index: dict) -> str:
@@ -56,48 +56,61 @@ class OpenAlexSearcher(PaperSource):
             logger.warning(f"Error reconstructing OpenAlex abstract: {e}")
             return ""
 
-    def search(self, query: str, max_results: int = 10) -> List[Paper]:
+    def search(self, query: str, max_results: int = 10, filter: str = "") -> List[Paper]:
         """
         Search OpenAlex works. Uses the 'search' filter.
 
         Args:
             query: Search query string
             max_results: Maximum results to return (natively max 200 per page)
+            filter: Optional OpenAlex works filter, e.g.
+                'publication_year:>2020,language:de'
 
         Returns:
             List[Paper]: List of found papers with metadata.
+
+        Raises:
+            requests.RequestException: on any failed request. An empty list
+                means OpenAlex found nothing, never that it did not answer.
         """
         papers = []
 
         try:
+            # Deliberately the plain "search", not the keyword-aware
+            # "search.title_abstract_keywords". Measured 2026-10-17 on 19
+            # queries, top 10 judged blind: precision 0.84 vs 0.88, and 7 to 10
+            # of the top 10 identical. But the keyword field requires every
+            # word in title or abstract and its keywords are English, so a
+            # German query like "Wärmepumpe Altbau" finds 0 works there and 59
+            # here. Its gain (synonyms, realistic hit counts) lies beyond the
+            # five results per source that a search_papers call shows.
             params = {
                 "search": query,
                 "per_page": min(max_results, 200),
             }
+            filter = (filter or "").strip()
+            if filter:
+                params["filter"] = filter
             if self.api_key:
                 params["api_key"] = self.api_key
 
             response = self.session.get(self.BASE_URL, params=params, timeout=30)
 
+            # Every failure raises. A 409 used to come back as an empty list,
+            # so search_papers reported "openalex: 0" for an exhausted budget,
+            # and a mistyped filter would have read as a topic without works.
             if response.status_code != 200:
-                if response.status_code == 409:
-                    logger.error(
-                        "OpenAlex: Credit-Kontingent aufgebraucht (HTTP 409). "
-                        "Ohne API-Key sind nur ca. 10 Suchen pro Tag moeglich. "
-                        "Bitte PAPER_SEARCH_MCP_OPENALEX_API_KEY setzen."
-                    )
-                elif response.status_code == 429:
-                    logger.error(
-                        "OpenAlex: Rate-Limit erreicht (HTTP 429). "
-                        "Spaeter erneut versuchen oder Anfragen drosseln."
-                    )
-                else:
-                    logger.error(
-                        f"OpenAlex search failed with status {response.status_code}"
-                    )
-                return papers
+                raise requests.RequestException(
+                    f"OpenAlex search failed: HTTP {response.status_code}"
+                    + self._fehlergrund(response)
+                )
 
-            data = response.json()
+            try:
+                data = response.json()
+            except ValueError as exc:
+                raise requests.RequestException(
+                    f"OpenAlex search failed: response is not JSON ({exc})"
+                ) from exc
             results = data.get("results", [])
 
             for item in results:
@@ -159,11 +172,17 @@ class OpenAlexSearcher(PaperSource):
                     except ValueError:
                         pass
 
-                # Categories / Concepts
-                concepts = [
-                    concept.get("display_name")
-                    for concept in item.get("concepts", [])
-                    if concept.get("display_name")
+                # Keywords (tagged from title and abstract since 2026-10), best
+                # first. The old "concepts" were derived from topics and often
+                # wrong; a work without keywords has no recognisable topic.
+                keywords = [
+                    kw.get("display_name")
+                    for kw in sorted(
+                        item.get("keywords") or [],
+                        key=lambda kw: kw.get("score") or 0,
+                        reverse=True,
+                    )
+                    if kw.get("display_name")
                 ]
 
                 papers.append(
@@ -176,7 +195,7 @@ class OpenAlexSearcher(PaperSource):
                         pdf_url=pdf_url or "",
                         published_date=published_date,
                         source="openalex",
-                        categories=concepts[:5],  # Keep top 5 concepts to reduce size
+                        keywords=keywords[:5],  # Keep the 5 best to reduce size
                         doi=doi,
                         citations=item.get("cited_by_count", 0),
                         # Ohne das ging der Zeitschriftenname bei jeder Suche
@@ -188,10 +207,28 @@ class OpenAlexSearcher(PaperSource):
                     )
                 )
 
+        except requests.RequestException:
+            raise
         except Exception as e:
             logger.error(f"OpenAlex search error: {e}")
 
         return papers
+
+    @staticmethod
+    def _fehlergrund(response) -> str:
+        """Why OpenAlex refused, in words the caller can act on."""
+        if response.status_code == 409:
+            return (" (credit budget exhausted; without an API key about 100 "
+                    "searches per day and IP — set PAPER_SEARCH_MCP_OPENALEX_API_KEY)")
+        if response.status_code == 429:
+            return " (rate limit; retry later)"
+        try:
+            nachricht = response.json().get("message") or ""
+        except ValueError:
+            nachricht = ""
+        # A bad filter lists every valid field; the first sentence is enough.
+        nachricht = nachricht.split(". Valid fields")[0][:200]
+        return f" ({nachricht})" if nachricht else ""
 
     def download_pdf(self, paper_id: str, save_path: str) -> str:
         """

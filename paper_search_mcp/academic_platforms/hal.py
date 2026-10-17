@@ -240,9 +240,9 @@ class HALSearcher(PaperSource):
 
             authors_field = doc.get("authFullName_s", [])
             if isinstance(authors_field, list):
-                authors = ", ".join(authors_field)
+                authors = [str(name).strip() for name in authors_field if str(name).strip()]
             else:
-                authors = str(authors_field)
+                authors = [str(authors_field).strip()] if authors_field else []
 
             abstract_field = doc.get("abstract_s", [])
             if isinstance(abstract_field, list):

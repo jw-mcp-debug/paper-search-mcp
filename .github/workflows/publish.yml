@@ -63,6 +63,7 @@ jobs:
           tests/test_openalex_sources.py
           tests/test_semantic.py
           tests/test_published_date_types.py
+          tests/test_author_lists.py
           -x -q --tb=short
 
       - name: Build package

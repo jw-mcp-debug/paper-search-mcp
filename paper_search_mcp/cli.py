@@ -67,16 +67,15 @@ def _init_searchers() -> None:
     SEARCHERS["hal"] = HALSearcher()
     SEARCHERS["ssrn"] = SSRNSearcher()
 
-    # Optional paid connectors
+    # Optional paid connector
     ieee_key = get_env("IEEE_API_KEY", "")
     if ieee_key:
         from .academic_platforms.ieee import IEEESearcher
         SEARCHERS["ieee"] = IEEESearcher()
 
-    acm_key = get_env("ACM_API_KEY", "")
-    if acm_key:
-        from .academic_platforms.acm import ACMSearcher
-        SEARCHERS["acm"] = ACMSearcher()
+    # ACM needs no key since 0.8.0 (open access, searched via OpenAlex).
+    from .academic_platforms.acm import ACMSearcher
+    SEARCHERS["acm"] = ACMSearcher()
 
 
 ALL_SOURCES = [
