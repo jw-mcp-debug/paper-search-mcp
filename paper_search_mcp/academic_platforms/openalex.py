@@ -20,8 +20,8 @@ class OpenAlexSearcher(PaperSource):
         self.session.headers.update({"User-Agent": "paper-search-mcp/1.0"})
 
         # Seit 13.02.2026 verlangt die OpenAlex-API einen (kostenlosen) API-Key.
-        # Ohne Key gibt es nur 100 Credits/Tag (eine Suche kostet 10) und danach
-        # HTTP 409 -> leere Trefferlisten. Der "polite pool" (mailto-Parameter)
+        # Ohne Key gibt es 0,10 $ pro Tag und IP (eine Suche kostet 0,001 $,
+        # also rund 100 Suchen) und danach HTTP 409 -> leere Trefferlisten. Der "polite pool" (mailto-Parameter)
         # wurde abgeschafft.
         # Key NICHT im Code hinterlegen, sondern als Umgebungsvariable setzen.
         self.api_key = (
@@ -33,8 +33,8 @@ class OpenAlexSearcher(PaperSource):
         if not self.api_key:
             logger.warning(
                 "Kein OpenAlex-API-Key gesetzt "
-                "(PAPER_SEARCH_MCP_OPENALEX_API_KEY). Die Suche ist auf ca. 10 "
-                "Anfragen pro Tag begrenzt und liefert danach keine Treffer mehr."
+                "(PAPER_SEARCH_MCP_OPENALEX_API_KEY). Die Suche ist auf ca. 100 "
+                "Anfragen pro Tag und IP begrenzt und liefert danach keine Treffer mehr."
             )
 
     def _reconstruct_abstract(self, inverted_index: dict) -> str:
@@ -70,6 +70,14 @@ class OpenAlexSearcher(PaperSource):
         papers = []
 
         try:
+            # Deliberately the plain "search", not the keyword-aware
+            # "search.title_abstract_keywords". Measured 2026-10-17 on 19
+            # queries, top 10 judged blind: precision 0.84 vs 0.88, and 7 to 10
+            # of the top 10 identical. But the keyword field requires every
+            # word in title or abstract and its keywords are English, so a
+            # German query like "Wärmepumpe Altbau" finds 0 works there and 59
+            # here. Its gain (synonyms, realistic hit counts) lies beyond the
+            # five results per source that a search_papers call shows.
             params = {
                 "search": query,
                 "per_page": min(max_results, 200),
@@ -159,11 +167,17 @@ class OpenAlexSearcher(PaperSource):
                     except ValueError:
                         pass
 
-                # Categories / Concepts
-                concepts = [
-                    concept.get("display_name")
-                    for concept in item.get("concepts", [])
-                    if concept.get("display_name")
+                # Keywords (tagged from title and abstract since 2026-10), best
+                # first. The old "concepts" were derived from topics and often
+                # wrong; a work without keywords has no recognisable topic.
+                keywords = [
+                    kw.get("display_name")
+                    for kw in sorted(
+                        item.get("keywords") or [],
+                        key=lambda kw: kw.get("score") or 0,
+                        reverse=True,
+                    )
+                    if kw.get("display_name")
                 ]
 
                 papers.append(
@@ -176,7 +190,7 @@ class OpenAlexSearcher(PaperSource):
                         pdf_url=pdf_url or "",
                         published_date=published_date,
                         source="openalex",
-                        categories=concepts[:5],  # Keep top 5 concepts to reduce size
+                        keywords=keywords[:5],  # Keep the 5 best to reduce size
                         doi=doi,
                         citations=item.get("cited_by_count", 0),
                         # Ohne das ging der Zeitschriftenname bei jeder Suche
