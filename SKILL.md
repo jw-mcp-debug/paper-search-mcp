@@ -401,7 +401,7 @@ Fünf Dinge, die man beim Auswerten wissen muss:
   IP-Freischaltung, die nicht vorliegt; die Quelle antwortet dauerhaft leer. Google
   Scholar und SSRN stehen auf dem Connector nicht zur Verfügung.
 
-Drei Parameter, die sich in dieser Stufe lohnen:
+Vier Parameter, die sich in dieser Stufe lohnen:
 
 - `crossref_filter="type:journal-article"` filtert Dissertationen, Proceedings und
   Verlagsartefakte aus dem Crossref-Anteil. In einem Testlauf zu „cross-laminated
@@ -411,9 +411,15 @@ Drei Parameter, die sich in dieser Stufe lohnen:
 - `abstract_chars` kürzt die Abstracts (Standard 600 Zeichen). Fürs Screening
   reichen die ersten Sätze; für die Begriffsernte im `p`-Hotkey `abstract_chars=0`
   setzen, sonst fehlt gerade das Vokabular aus dem hinteren Teil.
-- **Der Jahresfilter wirkt nur auf Semantic Scholar.** Zum Priorisieren aktueller
-  Arbeiten nutzbar, aber sage nie, die Trefferliste sei auf einen Zeitraum
-  eingegrenzt — für echte Aktualität in der Auswahl nach Erscheinungsjahr filtern.
+- `openalex_filter` filtert den OpenAlex-Anteil: `publication_year:>2020` für
+  aktuelle Arbeiten, `language:de` für deutschsprachige Literatur (greift auch bei englischer
+  Anfrage, weil viele deutsche Arbeiten englische Abstracts tragen), mehrere
+  Bedingungen mit Komma. Ein vertippter Filter kommt als Fehler unter `errors`
+  zurück, nicht als Nullbefund.
+- **`year` wirkt nur auf Semantic Scholar, `openalex_filter` nur auf OpenAlex.**
+  Crossref und die übrigen Quellen bleiben ungefiltert. Sage deshalb nie, die
+  ganze Trefferliste sei auf einen Zeitraum eingegrenzt — für echte Aktualität in
+  der Auswahl nach Erscheinungsjahr filtern.
 
 **Quellenfehler und Drosselung.** „Keine Treffer" und „hat nicht geantwortet" sind
 zwei verschiedene Aussagen und werden nie vermischt: Ein gedrosseltes Ergebnis als
@@ -854,7 +860,7 @@ Die vier Katalog-Tools nehmen ihre Argumente **flach**, nicht in ein `params`-Ob
 gewickelt. Jeder Treffer trägt eine Bestandszeile; sie füllt die Spalte
 „Verfügbarkeit" und bestimmt den Beschaffungsweg (siehe Stufe 1).
 
-- `search_papers(query, sources="openalex,semantic,crossref", max_results_per_source=5, year=optional, abstract_chars=600, crossref_filter="")`
+- `search_papers(query, sources="openalex,semantic,crossref", max_results_per_source=5, year=optional, abstract_chars=600, crossref_filter="", openalex_filter="")`
   — `sources` ist der Weg zu den einzelnen Datenbanken; Crossref, CORE, OpenAIRE und
   die übrigen sind Parameterwerte, keine eigenen Aufrufe. Welches Set wann, steht in
   Stufe 2.

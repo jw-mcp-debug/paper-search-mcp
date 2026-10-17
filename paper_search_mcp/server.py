@@ -307,6 +307,7 @@ async def search_papers(
     year: Optional[str] = None,
     abstract_chars: int = 600,
     crossref_filter: str = "",
+    openalex_filter: str = "",
 ) -> Dict[str, Any]:
     """Unified top-level search across all configured academic platforms.
 
@@ -323,6 +324,9 @@ async def search_papers(
             in full, which is what harvesting search terms from abstracts needs.
         crossref_filter: CrossRef filter applied inside the aggregation, e.g.
             'type:journal-article' or 'from-pub-date:2020-01-01'.
+        openalex_filter: OpenAlex filter applied inside the aggregation, e.g.
+            'publication_year:>2020' or 'language:de'. Unlike year, which
+            only reaches Semantic Scholar.
     Returns:
         Aggregated dictionary with per-source stats, errors, and deduplicated papers.
     """
@@ -358,7 +362,9 @@ async def search_papers(
                 query, max_results=max_results_per_source, filter=crossref_filter or None
             )
         elif source == "openalex":
-            task_map[source] = search_openalex(query, max_results_per_source)
+            task_map[source] = search_openalex(
+                query, max_results_per_source, filter=openalex_filter
+            )
         elif source == "pmc":
             task_map[source] = search_pmc(query, max_results_per_source)
         elif source == "core":
@@ -581,13 +587,15 @@ async def get_crossref_paper_by_doi(doi: str) -> Dict:
 
 @mcp.tool()
 async def search_openalex(
-    query: str, max_results: int = 10, mit_kennzahlen: bool = False
+    query: str, max_results: int = 10, mit_kennzahlen: bool = False, filter: str = ""
 ) -> List[Dict]:
     """Search academic papers from OpenAlex.
 
     Args:
         query: Search query string (e.g., 'machine learning').
         max_results: Maximum number of papers to return (default: 10).
+        filter: OpenAlex works filter, comma-separated, e.g.
+            'publication_year:>2020,language:de' or 'open_access.is_oa:true'.
         mit_kennzahlen: Add the publishing journal's metrics to each result
             (citation average over two years, h-index). Off by default because
             it costs one extra OpenAlex request per 50 distinct journals. Not
@@ -595,7 +603,8 @@ async def search_openalex(
     Returns:
         List of paper metadata in dictionary format.
     """
-    papers = await async_search(openalex_searcher, query, max_results)
+    extra = {"filter": filter.strip()} if (filter or "").strip() else {}
+    papers = await async_search(openalex_searcher, query, max_results, **extra)
     if papers and mit_kennzahlen:
         papers = await asyncio.to_thread(quellen.reichere_dicts_an, papers)
     return papers if papers else []

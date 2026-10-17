@@ -56,16 +56,22 @@ class OpenAlexSearcher(PaperSource):
             logger.warning(f"Error reconstructing OpenAlex abstract: {e}")
             return ""
 
-    def search(self, query: str, max_results: int = 10) -> List[Paper]:
+    def search(self, query: str, max_results: int = 10, filter: str = "") -> List[Paper]:
         """
         Search OpenAlex works. Uses the 'search' filter.
 
         Args:
             query: Search query string
             max_results: Maximum results to return (natively max 200 per page)
+            filter: Optional OpenAlex works filter, e.g.
+                'publication_year:>2020,language:de'
 
         Returns:
             List[Paper]: List of found papers with metadata.
+
+        Raises:
+            requests.RequestException: on any failed request. An empty list
+                means OpenAlex found nothing, never that it did not answer.
         """
         papers = []
 
@@ -82,30 +88,29 @@ class OpenAlexSearcher(PaperSource):
                 "search": query,
                 "per_page": min(max_results, 200),
             }
+            filter = (filter or "").strip()
+            if filter:
+                params["filter"] = filter
             if self.api_key:
                 params["api_key"] = self.api_key
 
             response = self.session.get(self.BASE_URL, params=params, timeout=30)
 
+            # Every failure raises. A 409 used to come back as an empty list,
+            # so search_papers reported "openalex: 0" for an exhausted budget,
+            # and a mistyped filter would have read as a topic without works.
             if response.status_code != 200:
-                if response.status_code == 409:
-                    logger.error(
-                        "OpenAlex: Credit-Kontingent aufgebraucht (HTTP 409). "
-                        "Ohne API-Key sind nur ca. 10 Suchen pro Tag moeglich. "
-                        "Bitte PAPER_SEARCH_MCP_OPENALEX_API_KEY setzen."
-                    )
-                elif response.status_code == 429:
-                    logger.error(
-                        "OpenAlex: Rate-Limit erreicht (HTTP 429). "
-                        "Spaeter erneut versuchen oder Anfragen drosseln."
-                    )
-                else:
-                    logger.error(
-                        f"OpenAlex search failed with status {response.status_code}"
-                    )
-                return papers
+                raise requests.RequestException(
+                    f"OpenAlex search failed: HTTP {response.status_code}"
+                    + self._fehlergrund(response)
+                )
 
-            data = response.json()
+            try:
+                data = response.json()
+            except ValueError as exc:
+                raise requests.RequestException(
+                    f"OpenAlex search failed: response is not JSON ({exc})"
+                ) from exc
             results = data.get("results", [])
 
             for item in results:
@@ -202,10 +207,28 @@ class OpenAlexSearcher(PaperSource):
                     )
                 )
 
+        except requests.RequestException:
+            raise
         except Exception as e:
             logger.error(f"OpenAlex search error: {e}")
 
         return papers
+
+    @staticmethod
+    def _fehlergrund(response) -> str:
+        """Why OpenAlex refused, in words the caller can act on."""
+        if response.status_code == 409:
+            return (" (credit budget exhausted; without an API key about 100 "
+                    "searches per day and IP — set PAPER_SEARCH_MCP_OPENALEX_API_KEY)")
+        if response.status_code == 429:
+            return " (rate limit; retry later)"
+        try:
+            nachricht = response.json().get("message") or ""
+        except ValueError:
+            nachricht = ""
+        # A bad filter lists every valid field; the first sentence is enough.
+        nachricht = nachricht.split(". Valid fields")[0][:200]
+        return f" ({nachricht})" if nachricht else ""
 
     def download_pdf(self, paper_id: str, save_path: str) -> str:
         """
