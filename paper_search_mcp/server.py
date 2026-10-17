@@ -66,6 +66,17 @@ def _tool(*args, **kwargs):
     def _decorate(fn):
         name = kwargs.get("name") or fn.__name__
         _offered_tool_names.add(name)
+        # Claude lists tools marked read-only apart and can allow them without
+        # asking; LibreChat drops annotations before they reach the model, so
+        # they cost nothing there. Every tool here only reads from external
+        # services — except the IEEE download/read pair, which writes files.
+        # Tools that set their own annotations (the catalogue) keep them.
+        schreibt = name.startswith(("download_", "read_"))
+        kwargs.setdefault("annotations", {
+            "readOnlyHint": not schreibt,
+            "destructiveHint": False,
+            "openWorldHint": True,
+        })
         if _enabled_tools and name not in _enabled_tools:
             return fn  # not registered, still callable inside the server
         return _register_tool(*args, **kwargs)(fn)
